@@ -33,16 +33,49 @@
     }
   </div>
 
-  <div #bookHost class="book">
-    @for (page of pages; track page; let index = $index) {
-      <div class="book-page">
-        <img
-          [src]="page"
-          class="page-image"
-          [alt]="'Comic page ' + (index + 1)"
-        />
-      </div>
-    }
+  <div class="book-shell" [class.is-reading]="showReadingUnderlay">
+    <div class="underlay underlay-left" [class.visible]="showLeftUnderlay"></div>
+    <div class="underlay underlay-right" [class.visible]="showRightUnderlay"></div>
+
+    <div
+      #bookHost
+      class="book"
+      [class.reader-open]="showReadingUnderlay"
+      [class.opening-cover]="isOpeningCover"
+    >
+      @for (page of pages; track page.src) {
+        <div
+          class="book-page"
+          [attr.data-density]="page.density"
+          [class.front-cover-page]="page.role === 'front-cover'"
+          [class.inside-cover-page]="page.role === 'inside-cover'"
+          [class.content-page]="page.role === 'content'"
+          [class.blank-page]="page.role === 'blank'"
+          [class.back-cover-page]="page.role === 'back-cover'"
+          [class.page-left]="page.side === 'left'"
+          [class.page-right]="page.side === 'right'"
+        >
+          <div class="page-visual">
+            <div class="paper-window" [class.joined-spread]="!!page.spreadSrc">
+              @if (page.spreadSrc) {
+                <div
+                  class="spread-half"
+                  [class.left-half]="page.side === 'left'"
+                  [class.right-half]="page.side === 'right'"
+                  [style.background-image]="'url(' + page.spreadSrc + ')'"
+                ></div>
+              } @else {
+                <img
+                  [src]="page.src"
+                  class="page-image"
+                  [alt]="page.alt"
+                />
+              }
+            </div>
+          </div>
+        </div>
+      }
+    </div>
   </div>
 
   <button

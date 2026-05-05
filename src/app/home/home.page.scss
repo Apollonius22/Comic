@@ -9,10 +9,54 @@
   overflow: hidden;
 }
 
+.book-shell {
+  position: relative;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.underlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.underlay.visible {
+  opacity: 1;
+}
+
+.underlay-left {
+  left: 0;
+  background-image: url('/assets/comics/bookends/inside_left.png');
+}
+
+.underlay-right {
+  right: 0;
+  background-image: url('/assets/comics/bookends/inside_right.png');
+}
+
 .book {
+  position: relative;
+  z-index: 1;
 }
 
 .book-page {
+  overflow: hidden;
+  background: transparent;
+}
+
+.page-visual {
+  position: relative;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -22,6 +66,96 @@
   object-fit: contain;
   display: block;
   -webkit-user-drag: none;
+  user-select: none;
+}
+
+.front-cover-page,
+.inside-cover-page,
+.back-cover-page {
+  .page-visual {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+  }
+
+  .paper-window {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.content-page {
+  background: transparent;
+
+  .page-visual {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    padding: 28px 14px;
+  }
+
+  .paper-window {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #11100f;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  }
+
+  .page-image,
+  .spread-half {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.blank-page {
+  .page-visual {
+    box-sizing: border-box;
+    padding: 28px 14px;
+  }
+
+  .paper-window {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+  }
+}
+
+.content-page.page-left .page-visual {
+  padding: 28px 4px 28px 22px;
+}
+
+.content-page.page-right .page-visual {
+  padding: 28px 22px 28px 4px;
+}
+
+.content-page.page-left .paper-window {
+  border-radius: 8px 0 0 8px;
+  margin-right: -1px;
+}
+
+.content-page.page-right .paper-window {
+  border-radius: 0 8px 8px 0;
+  margin-left: -1px;
+}
+
+.spread-half {
+  background-repeat: no-repeat;
+  background-size: 200% 100%;
+}
+
+.spread-half.left-half {
+  background-position: left center;
+}
+
+.spread-half.right-half {
+  background-position: right center;
+}
+
+.book.opening-cover {
+  filter: drop-shadow(0 24px 40px rgba(0, 0, 0, 0.45));
 }
 
 .dragon-menu {
