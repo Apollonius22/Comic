@@ -1,0 +1,7 @@
+{
+  "name": "comic",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}
