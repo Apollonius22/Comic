@@ -1,20 +1,72 @@
-<ion-header [translucent]="true">
-  <ion-toolbar>
-    <ion-title>
-      Blank
-    </ion-title>
-  </ion-toolbar>
-</ion-header>
+<div class="reader" (click)="toggleUI()">
 
-<ion-content [fullscreen]="true">
-  <ion-header collapse="condense">
-    <ion-toolbar>
-      <ion-title size="large">Blank</ion-title>
-    </ion-toolbar>
-  </ion-header>
+  <div class="dragon-menu" (click)="$event.stopPropagation()">
+    <button
+      type="button"
+      class="dragon-button"
+      aria-label="Open comic menu"
+      [attr.aria-expanded]="showMenu"
+      (click)="toggleMenu()"
+    >
+      <span class="dragon-neck neck-1"></span>
+      <span class="dragon-neck neck-2"></span>
+      <span class="dragon-neck neck-3"></span>
+      <span class="dragon-neck neck-4"></span>
+      <span class="dragon-neck neck-5"></span>
+      <span class="dragon-head head-1"></span>
+      <span class="dragon-head head-2"></span>
+      <span class="dragon-head head-3"></span>
+      <span class="dragon-head head-4"></span>
+      <span class="dragon-head head-5"></span>
+    </button>
 
-  <div id="container">
-    <strong>Ready to create an app?</strong>
-    <p>Start with Ionic <a target="_blank" rel="noopener noreferrer" href="https://ionicframework.com/docs/components">UI Components</a></p>
+    @if (showMenu) {
+      <div class="menu-panel">
+        <a
+          class="menu-item"
+          href="assets/exports/comic.gif"
+          download="comic.gif"
+        >
+          Export as GIF
+        </a>
+      </div>
+    }
   </div>
-</ion-content>
+
+  <div #bookHost class="book">
+    @for (page of pages; track page; let index = $index) {
+      <div class="book-page">
+        <img
+          [src]="page"
+          class="page-image"
+          [alt]="'Comic page ' + (index + 1)"
+        />
+      </div>
+    }
+  </div>
+
+  <button
+    type="button"
+    class="nav-button left"
+    aria-label="Previous pages"
+    (click)="prevPage(); $event.stopPropagation()"
+  >
+    ‹
+  </button>
+
+  <button
+    type="button"
+    class="nav-button right"
+    aria-label="Next pages"
+    (click)="nextPage(); $event.stopPropagation()"
+  >
+    ›
+  </button>
+
+  @if (showUI) {
+    <div class="ui">
+      {{ spreadStart }}-{{ spreadEnd }} / {{ pages.length }}
+    </div>
+  }
+
+</div>
