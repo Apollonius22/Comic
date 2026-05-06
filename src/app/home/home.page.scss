@@ -92,52 +92,61 @@
     box-sizing: border-box;
     width: 100%;
     height: 100%;
-    padding: 28px 14px;
+    padding: 0;
   }
 
   .paper-window {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #11100f;
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+    background: transparent;
+    box-shadow: none;
   }
 
   .page-image,
   .spread-half {
-    width: 100%;
-    height: 100%;
+    width: 92%;
+    height: 92%;
   }
 }
 
 .blank-page {
   .page-visual {
     box-sizing: border-box;
-    padding: 28px 14px;
+    padding: 0;
   }
 
   .paper-window {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 100%;
     height: 100%;
     background: transparent;
   }
+
+  .page-image {
+    width: 92%;
+    height: 92%;
+  }
 }
 
 .content-page.page-left .page-visual {
-  padding: 28px 4px 28px 22px;
+  padding: 0;
 }
 
 .content-page.page-right .page-visual {
-  padding: 28px 22px 28px 4px;
+  padding: 0;
 }
 
 .content-page.page-left .paper-window {
-  border-radius: 8px 0 0 8px;
   margin-right: -1px;
 }
 
 .content-page.page-right .paper-window {
-  border-radius: 0 8px 8px 0;
   margin-left: -1px;
 }
 
