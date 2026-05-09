@@ -34,7 +34,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   private readonly chapters = [
     { folder: 'chapter1', pageCount: 31 },
-    { folder: 'chapter2', pageCount: 3 },
+    { folder: 'chapter2', pageCount: 13 },
   ];
   private readonly contentPages = this.createContentPages();
 
@@ -74,11 +74,19 @@ export class HomePage implements AfterViewInit, OnDestroy {
   gifExportAvailable = false;
   isOpeningCover = false;
   isCoverTransitioning = false;
+  loadedPageIndexes = new Set<number>();
 
   private pageFlip?: PageFlip;
   private coverTransitionTimer?: number;
   private showUnderlayAfterCoverTransition = false;
   private underlayTargetIndex?: number;
+  private readonly updateBookLayout = () => {
+    this.pageFlip?.update();
+  };
+
+  constructor() {
+    this.queuePageImages(0);
+  }
 
   private createContentPages(): ComicPage[] {
     let contentOffset = 0;
@@ -132,9 +140,9 @@ export class HomePage implements AfterViewInit, OnDestroy {
       width: 520,
       height: 780,
       size: 'stretch',
-      minWidth: 300,
+      minWidth: 240,
       maxWidth: 520,
-      minHeight: 450,
+      minHeight: 360,
       maxHeight: 780,
       drawShadow: true,
       flippingTime: 1300,
@@ -150,6 +158,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
     this.pageFlip.on('flip', event => {
       this.currentIndex = Number(event.data);
+      this.queuePageImages(this.currentIndex);
       this.finishCoverTransitionIfReady(true);
     });
 
@@ -161,6 +170,9 @@ export class HomePage implements AfterViewInit, OnDestroy {
     this.pageFlip.loadFromHTML(
       Array.from(this.bookHost.nativeElement.querySelectorAll<HTMLElement>('.book-page'))
     );
+
+    window.addEventListener('resize', this.updateBookLayout);
+    window.addEventListener('orientationchange', this.updateBookLayout);
   }
 
   private async checkGifExportAvailability() {
@@ -177,6 +189,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
       window.clearTimeout(this.coverTransitionTimer);
     }
 
+    window.removeEventListener('resize', this.updateBookLayout);
+    window.removeEventListener('orientationchange', this.updateBookLayout);
     this.pageFlip?.destroy();
   }
 
@@ -238,9 +252,15 @@ export class HomePage implements AfterViewInit, OnDestroy {
       || page.role === 'back-cover';
   }
 
+  getPageSrc(page: ComicPage, index: number) {
+    return this.loadedPageIndexes.has(index) ? page.src : undefined;
+  }
+
   nextPage() {
     const index = this.pageFlip?.getCurrentPageIndex?.() ?? this.currentIndex;
     const targetIndex = this.getNextSpreadIndex(index);
+
+    this.queuePageImages(targetIndex);
 
     if (this.shouldSuppressUnderlayDuringFlip(index, targetIndex)) {
       this.startCoverTransition(targetIndex);
@@ -252,6 +272,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
   prevPage() {
     const index = this.pageFlip?.getCurrentPageIndex?.() ?? this.currentIndex;
     const targetIndex = this.getPrevSpreadIndex(index);
+
+    this.queuePageImages(targetIndex);
 
     if (this.shouldSuppressUnderlayDuringFlip(index, targetIndex)) {
       this.startCoverTransition(targetIndex);
@@ -311,6 +333,21 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   private shouldShowUnderlayBehind(page?: ComicPage) {
     return page?.role === 'content' || page?.role === 'blank';
+  }
+
+  private queuePageImages(centerIndex: number) {
+    const nextLoadedPageIndexes = new Set(this.loadedPageIndexes);
+    const firstIndex = Math.max(0, centerIndex - 2);
+    const lastIndex = Math.min(this.pages.length - 1, centerIndex + 4);
+
+    for (let index = firstIndex; index <= lastIndex; index += 1) {
+      nextLoadedPageIndexes.add(index);
+    }
+
+    nextLoadedPageIndexes.add(0);
+    nextLoadedPageIndexes.add(1);
+
+    this.loadedPageIndexes = nextLoadedPageIndexes;
   }
 
   private spreadShowsUnderlay(index: number) {

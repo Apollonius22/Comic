@@ -7,6 +7,7 @@ declare module 'page-flip/dist/js/page-flip.module.js' {
   export class PageFlip {
     constructor(element: HTMLElement, settings: Record<string, unknown>);
     destroy(): void;
+    update(): void;
     getCurrentPageIndex(): number;
     getPageCount(): number;
     loadFromHTML(items: HTMLElement[]): void;

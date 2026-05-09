@@ -99,12 +99,16 @@
                   [class.right-half]="page.side === 'right'"
                   [style.background-image]="'url(' + page.spreadSrc + ')'"
                 ></div>
-              } @else {
+              } @else if (getPageSrc(page, $index); as pageSrc) {
                 <img
-                  [src]="page.src"
+                  [src]="pageSrc"
                   class="page-image"
                   [alt]="page.alt"
+                  loading="lazy"
+                  decoding="async"
                 />
+              } @else {
+                <div class="page-placeholder" aria-hidden="true"></div>
               }
             </div>
           </div>
