@@ -32,6 +32,12 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   @ViewChild('bookHost', { static: true }) bookHost!: ElementRef<HTMLElement>;
 
+  private readonly chapters = [
+    { folder: 'chapter1', pageCount: 31 },
+    { folder: 'chapter2', pageCount: 3 },
+  ];
+  private readonly contentPages = this.createContentPages();
+
   pages: ComicPage[] = [
     {
       src: 'assets/comics/bookends/cover.png',
@@ -45,20 +51,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
       density: 'hard',
       alt: 'Inside front cover',
     },
-    ...Array.from({ length: 13 }, (_, index) => ({
-      src: `assets/comics/chapter1/page_${index + 1}.png`,
-      role: 'content' as const,
-      density: 'soft' as const,
-      alt: `Comic page ${index + 1}`,
-      side: index % 2 === 0 ? 'right' as const : 'left' as const,
-      spreadId: `content-spread-${Math.floor(index / 2) + 1}`,
-    })),
-    {
-      src: 'assets/comics/bookends/blank.png',
-      role: 'blank',
-      density: 'soft',
-      alt: 'Blank page',
-    },
+    ...this.contentPages,
+    ...this.createBlankPageIfNeeded(this.contentPages.length),
     {
       src: 'assets/comics/bookends/inside_right.png',
       role: 'inside-cover',
@@ -77,6 +71,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   flipState: ReaderFlipState = 'read';
   showUI = false;
   showMenu = false;
+  gifExportAvailable = false;
   isOpeningCover = false;
   isCoverTransitioning = false;
 
@@ -85,7 +80,54 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private showUnderlayAfterCoverTransition = false;
   private underlayTargetIndex?: number;
 
+  private createContentPages(): ComicPage[] {
+    let contentOffset = 0;
+    const pages: ComicPage[] = [];
+
+    for (const chapter of this.chapters) {
+      pages.push(...this.createChapterPages(chapter.folder, chapter.pageCount, contentOffset));
+      contentOffset += chapter.pageCount;
+    }
+
+    return pages;
+  }
+
+  private createChapterPages(chapter: string, count: number, contentOffset: number): ComicPage[] {
+    const chapterNumber = Number(chapter.match(/\d+/)?.[0] ?? 0);
+
+    return Array.from({ length: count }, (_, index) => {
+      const contentIndex = contentOffset + index;
+
+      return {
+        src: `assets/comics/${chapter}/page_${index + 1}.png`,
+        role: 'content' as const,
+        density: 'soft' as const,
+        alt: `Chapter ${chapterNumber} comic page ${index + 1}`,
+        side: contentIndex % 2 === 0 ? 'right' as const : 'left' as const,
+        spreadId: `chapter-${chapterNumber}-spread-${Math.floor(index / 2) + 1}`,
+      };
+    });
+  }
+
+  private createBlankPageIfNeeded(contentPageCount: number): ComicPage[] {
+    if (contentPageCount % 2 === 0) {
+      return [];
+    }
+
+    return [
+      {
+        src: 'assets/comics/bookends/blank.png',
+        role: 'blank',
+        density: 'soft',
+        alt: 'Blank page',
+        side: 'left',
+      },
+    ];
+  }
+
   ngAfterViewInit() {
+    this.checkGifExportAvailability();
+
     this.pageFlip = new PageFlip(this.bookHost.nativeElement, {
       width: 520,
       height: 780,
@@ -119,6 +161,15 @@ export class HomePage implements AfterViewInit, OnDestroy {
     this.pageFlip.loadFromHTML(
       Array.from(this.bookHost.nativeElement.querySelectorAll<HTMLElement>('.book-page'))
     );
+  }
+
+  private async checkGifExportAvailability() {
+    try {
+      const response = await fetch('assets/exports/comic.gif', { method: 'HEAD' });
+      this.gifExportAvailable = response.ok;
+    } catch {
+      this.gifExportAvailable = false;
+    }
   }
 
   ngOnDestroy() {

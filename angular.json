@@ -32,7 +32,10 @@
               {
                 "glob": "**/*",
                 "input": "src/assets",
-                "output": "assets"
+                "output": "assets",
+                "ignore": [
+                  "exports/*.gif"
+                ]
               }
             ],
             "styles": ["src/global.scss", "src/theme/variables.scss"],
@@ -106,7 +109,10 @@
               {
                 "glob": "**/*",
                 "input": "src/assets",
-                "output": "assets"
+                "output": "assets",
+                "ignore": [
+                  "exports/*.gif"
+                ]
               }
             ],
             "styles": ["src/global.scss", "src/theme/variables.scss"],

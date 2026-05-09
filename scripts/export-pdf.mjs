@@ -1,24 +1,17 @@
+import { deflateSync } from 'node:zlib';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import gifenc from 'gifenc';
 import { PNG } from 'pngjs';
-
-const { GIFEncoder, applyPalette, quantize } = gifenc;
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const args = parseArgs(process.argv.slice(2));
-const delayMs = Math.max(100, Number(args.delay ?? 2) * 1000);
-const outputWidth = Math.max(320, Number(args.width ?? 900));
-const output = join(root, args.out ?? 'src/assets/exports/comic.gif');
-const mode = args.mode === 'single' ? 'single' : 'spread';
+const outputWidth = Math.max(640, Number(args.width ?? 1100));
+const output = join(root, args.out ?? 'src/assets/exports/comic.pdf');
 const background = hexToRgb(args.background ?? '#11100f');
-const flipFrames = Math.max(0, Number(args.flipFrames ?? 14));
-const flipFrameDelay = Math.max(20, Number(args.flipDelay ?? 55));
 const pageRatio = Number(args.pageRatio ?? 1.5);
-const pageGap = mode === 'spread' ? Math.max(0, Number(args.pageGap ?? 0)) : 0;
 const canvasWidth = outputWidth;
-const slotWidth = mode === 'spread' ? Math.floor((canvasWidth - pageGap) / 2) : canvasWidth;
+const slotWidth = Math.floor(canvasWidth / 2);
 const canvasHeight = Math.round(slotWidth * pageRatio);
 const cssScale = slotWidth / 520;
 const contentTopBottomInset = scaledCss(28);
@@ -26,41 +19,25 @@ const contentOuterInset = scaledCss(22);
 const contentInnerInset = scaledCss(4);
 const blankSideInset = scaledCss(14);
 const coverLikeRoles = new Set(['front-cover', 'inside-cover', 'back-cover']);
-const underlayRoles = new Set(['content', 'blank']);
 
 const comic = getComicPages();
 comic.insideLeftImage = comic.insideLeft ? readPng(comic.insideLeft) : null;
 comic.insideRightImage = comic.insideRight ? readPng(comic.insideRight) : null;
-const pageItems = createPageItems(comic);
-const frames = mode === 'single'
-  ? pageItems.map(page => ({ left: null, right: page }))
-  : createBookFrames(pageItems);
-const gif = GIFEncoder();
 
-if (pageItems.length === 0) {
+const pageItems = createPageItems(comic);
+const frames = createBookFrames(pageItems);
+const pdfPages = frames.map(renderFrame);
+
+if (pdfPages.length === 0) {
   throw new Error('No comic pages found in src/assets/comics.');
 }
 
-for (let index = 0; index < frames.length; index += 1) {
-  writeGifFrame(drawFrame(frames[index]), delayMs);
-
-  if (mode === 'spread' && flipFrames > 0 && frames[index + 1]) {
-    for (let step = 1; step <= flipFrames; step += 1) {
-      writeGifFrame(drawFlipFrame(frames[index], frames[index + 1], step / (flipFrames + 1)), flipFrameDelay);
-    }
-  }
-}
-
-gif.finish();
 mkdirSync(dirname(output), { recursive: true });
-writeFileSync(output, gif.bytes());
+writeFileSync(output, createPdf(pdfPages));
 
-console.log(`Exported ${frames.length} ${mode} frames to ${output}`);
+console.log(`Exported ${pdfPages.length} flipbook PDF pages to ${output}`);
 console.log(`Content pages: ${comic.chapterPages.length}`);
 console.log(`Conditional blank page: ${comic.chapterPages.length % 2 === 1 ? 'yes' : 'no'}`);
-console.log(`Delay per frame: ${delayMs / 1000}s`);
-console.log(`Flip frames between spreads: ${mode === 'spread' ? flipFrames : 0}`);
-console.log(`Output size: ${canvasWidth}x${canvasHeight}`);
 
 function getComicPages() {
   const base = join(root, 'src/assets/comics');
@@ -74,6 +51,17 @@ function getComicPages() {
     end: existingPath(join(bookends, 'end.png')),
     chapterPages: getChapterPages(base),
   };
+}
+
+function getChapterPages(base) {
+  return readdirSync(base, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && /^chapter\d+$/i.test(entry.name))
+    .map(entry => join(base, entry.name))
+    .sort((a, b) => chapterNumber(a) - chapterNumber(b))
+    .flatMap(chapter => readdirSync(chapter)
+      .filter(file => /^page_\d+\.png$/i.test(file))
+      .sort((a, b) => pageNumber(a) - pageNumber(b))
+      .map(file => join(chapter, file)));
 }
 
 function createPageItems({ cover, insideLeft, chapterPages, blank, insideRight, end }) {
@@ -93,17 +81,6 @@ function createPageItems({ cover, insideLeft, chapterPages, blank, insideRight, 
     insideRight && createPage(insideRight, 'inside-cover', 'Inside back cover', 'right'),
     end && createPage(end, 'back-cover', 'Back cover'),
   ].filter(Boolean);
-}
-
-function getChapterPages(base) {
-  return readdirSync(base, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && /^chapter\d+$/i.test(entry.name))
-    .map(entry => join(base, entry.name))
-    .sort((a, b) => chapterNumber(a) - chapterNumber(b))
-    .flatMap(chapter => readdirSync(chapter)
-      .filter(file => /^page_\d+\.png$/i.test(file))
-      .sort((a, b) => pageNumber(a) - pageNumber(b))
-      .map(file => join(chapter, file)));
 }
 
 function createPage(path, role, alt, side = null) {
@@ -139,40 +116,25 @@ function createBookFrames(items) {
   return frames;
 }
 
-function drawFrame(frame) {
-  const rgba = createCanvas(canvasWidth, canvasHeight, background);
+function renderFrame(frame) {
+  if (!frame.left && frame.right?.role === 'front-cover') {
+    const rgba = createCanvas(slotWidth, canvasHeight, background);
+    drawPage(rgba, slotWidth, canvasHeight, frame.right, 0, 0, slotWidth, canvasHeight, 'right');
 
-  if (mode === 'single') {
-    drawPage(rgba, frame.right, 0, 0, canvasWidth, canvasHeight, 'right');
-  } else {
-    drawSpread(rgba, frame);
+    return { width: slotWidth, height: canvasHeight, rgb: rgbaToRgb(rgba) };
   }
 
-  return rgba;
-}
+  if (frame.left?.role === 'back-cover' && !frame.right) {
+    const rgba = createCanvas(slotWidth, canvasHeight, background);
+    drawPage(rgba, slotWidth, canvasHeight, frame.left, 0, 0, slotWidth, canvasHeight, 'left');
 
-function drawFlipFrame(current, next, progress) {
-  const rgba = createCanvas(canvasWidth, canvasHeight, background);
-  const eased = easeInOutCubic(progress);
-  const underlayFrame = underlaySignature(current) === underlaySignature(next) ? current : next;
-  const baseFrame = eased < 0.5 ? current : next;
-  const outgoingPage = current.right ?? current.left;
-  const incomingPage = next.left ?? next.right;
-
-  drawUnderlays(rgba, underlayFrame);
-  drawSpreadPages(rgba, baseFrame);
-
-  if (eased < 0.5) {
-    const fold = eased / 0.5;
-    const width = Math.max(2, Math.round(slotWidth * (1 - fold)));
-    drawTurningPage(rgba, outgoingPage, slotWidth + pageGap, 0, width, canvasHeight, 'right');
-  } else {
-    const fold = (eased - 0.5) / 0.5;
-    const width = Math.max(2, Math.round(slotWidth * fold));
-    drawTurningPage(rgba, incomingPage, slotWidth - width, 0, width, canvasHeight, 'left');
+    return { width: slotWidth, height: canvasHeight, rgb: rgbaToRgb(rgba) };
   }
 
-  return rgba;
+  const rgba = createCanvas(canvasWidth, canvasHeight, background);
+  drawSpread(rgba, frame);
+
+  return { width: canvasWidth, height: canvasHeight, rgb: rgbaToRgb(rgba) };
 }
 
 function drawSpread(target, frame) {
@@ -186,59 +148,32 @@ function drawUnderlays(target, frame) {
   }
 
   if (shouldShowUnderlayBehind(frame.right)) {
-    drawImageStretch(target, canvasWidth, canvasHeight, comic.insideRightImage, slotWidth + pageGap, 0, slotWidth, canvasHeight);
+    drawImageStretch(target, canvasWidth, canvasHeight, comic.insideRightImage, slotWidth, 0, slotWidth, canvasHeight);
   }
 }
 
 function drawSpreadPages(target, frame) {
   if (frame.left) {
-    drawPage(target, frame.left, 0, 0, slotWidth, canvasHeight, 'left');
+    drawPage(target, canvasWidth, canvasHeight, frame.left, 0, 0, slotWidth, canvasHeight, 'left');
   }
 
   if (frame.right) {
-    drawPage(target, frame.right, slotWidth + pageGap, 0, slotWidth, canvasHeight, 'right');
+    drawPage(target, canvasWidth, canvasHeight, frame.right, slotWidth, 0, slotWidth, canvasHeight, 'right');
   }
 }
 
-function drawPage(target, page, x, y, width, height, slotSide) {
+function drawPage(target, targetWidth, targetHeight, page, x, y, width, height, slotSide) {
   if (!page) {
     return;
   }
 
   if (coverLikeRoles.has(page.role)) {
-    drawContain(target, canvasWidth, canvasHeight, page.image, x, y, width, height);
+    drawContain(target, targetWidth, targetHeight, page.image, x, y, width, height);
     return;
   }
 
   const visual = getPageVisualRect(page, x, y, width, height, slotSide);
-
-  if (page.role === 'content') {
-    drawPaperWindowShadow(target, visual.x, visual.y, visual.width, visual.height);
-    fillRect(target, canvasWidth, canvasHeight, visual.x, visual.y, visual.width, visual.height, background);
-  }
-
-  drawContain(target, canvasWidth, canvasHeight, page.image, visual.x, visual.y, visual.width, visual.height);
-}
-
-function drawTurningPage(target, page, x, y, width, height, side) {
-  if (!page) {
-    drawTurningPaperBack(target, x, y, width, height);
-    return;
-  }
-
-  if (coverLikeRoles.has(page.role)) {
-    drawImageStretch(target, canvasWidth, canvasHeight, page.image, x, y, width, height);
-  } else {
-    fillRect(target, canvasWidth, canvasHeight, x, y, width, height, background);
-    drawImageStretch(target, canvasWidth, canvasHeight, page.image, x, y, width, height);
-  }
-
-  drawFoldShade(target, x, y, width, height, side);
-}
-
-function drawTurningPaperBack(target, x, y, width, height) {
-  fillRect(target, canvasWidth, canvasHeight, x, y, width, height, background);
-  drawFoldShade(target, x, y, width, height, 'left');
+  drawContain(target, targetWidth, targetHeight, page.image, visual.x, visual.y, visual.width, visual.height);
 }
 
 function getPageVisualRect(page, x, y, width, height, slotSide) {
@@ -271,52 +206,118 @@ function shouldShowUnderlayBehind(page) {
   return page?.role === 'content' || page?.role === 'blank';
 }
 
-function underlaySignature(frame) {
-  return `${shouldShowUnderlayBehind(frame.left) ? 'L' : '-'}${shouldShowUnderlayBehind(frame.right) ? 'R' : '-'}`;
-}
+function createPdf(pages) {
+  const objects = [];
+  const catalogId = reserveObject(objects);
+  const pagesId = reserveObject(objects);
+  const pageIds = [];
 
-function drawPaperWindowShadow(target, x, y, width, height) {
-  const shadow = Math.max(2, scaledCss(8));
+  for (const page of pages) {
+    const imageId = addObject(objects, createImageObject(page));
+    const content = Buffer.from(`q\n${page.width} 0 0 ${page.height} 0 0 cm\n/Im0 Do\nQ\n`);
+    const contentId = addObject(objects, createStreamObject('', content));
+    const pageId = addObject(objects, Buffer.from([
+      '<<',
+      '/Type /Page',
+      `/Parent ${pagesId} 0 R`,
+      `/MediaBox [0 0 ${page.width} ${page.height}]`,
+      `/Resources << /XObject << /Im0 ${imageId} 0 R >> >>`,
+      `/Contents ${contentId} 0 R`,
+      '>>',
+    ].join('\n')));
 
-  for (let offset = shadow; offset > 0; offset -= 1) {
-    const alpha = 0.02 * (offset / shadow);
-    drawRectAlpha(target, canvasWidth, canvasHeight, x, y + offset, width, height, { r: 0, g: 0, b: 0 }, alpha);
+    pageIds.push(pageId);
   }
+
+  setObject(objects, pagesId, Buffer.from([
+    '<<',
+    '/Type /Pages',
+    `/Count ${pageIds.length}`,
+    `/Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}]`,
+    '>>',
+  ].join('\n')));
+  setObject(objects, catalogId, Buffer.from([
+    '<<',
+    '/Type /Catalog',
+    `/Pages ${pagesId} 0 R`,
+    '/PageMode /UseNone',
+    '>>',
+  ].join('\n')));
+
+  return writePdfObjects(objects, catalogId);
 }
 
-function drawFoldShade(target, x, y, width, height, side) {
-  const maxAlpha = 0.28;
-  const safeWidth = Math.max(1, width);
+function createImageObject(page) {
+  const compressed = deflateSync(page.rgb);
+  const dictionary = [
+    '/Type /XObject',
+    '/Subtype /Image',
+    `/Width ${page.width}`,
+    `/Height ${page.height}`,
+    '/ColorSpace /DeviceRGB',
+    '/BitsPerComponent 8',
+    '/Filter /FlateDecode',
+  ].join('\n');
 
-  for (let col = 0; col < safeWidth; col += 1) {
-    const progress = col / safeWidth;
-    const alpha = side === 'right'
-      ? maxAlpha * (1 - progress)
-      : maxAlpha * progress;
-
-    for (let row = y; row < y + height && row < canvasHeight; row += 1) {
-      const dstX = x + col;
-
-      if (dstX < 0 || dstX >= canvasWidth) {
-        continue;
-      }
-
-      const index = (row * canvasWidth + dstX) * 4;
-      target[index] = blend(0, target[index], alpha);
-      target[index + 1] = blend(0, target[index + 1], alpha);
-      target[index + 2] = blend(0, target[index + 2], alpha);
-    }
-  }
+  return createStreamObject(dictionary, compressed);
 }
 
-function writeGifFrame(rgba, delay) {
-  const palette = quantize(rgba, 256);
-  const index = applyPalette(rgba, palette);
-  gif.writeFrame(index, canvasWidth, canvasHeight, {
-    palette,
-    delay,
-    repeat: 0,
+function createStreamObject(dictionary, stream) {
+  return Buffer.concat([
+    Buffer.from(`<<\n${dictionary}${dictionary ? '\n' : ''}/Length ${stream.length}\n>>\nstream\n`),
+    stream,
+    Buffer.from('\nendstream'),
+  ]);
+}
+
+function writePdfObjects(objects, catalogId) {
+  const chunks = [Buffer.from('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n', 'binary')];
+  const offsets = [0];
+  let size = chunks[0].length;
+
+  objects.forEach((object, index) => {
+    const id = index + 1;
+    const header = Buffer.from(`${id} 0 obj\n`);
+    const footer = Buffer.from('\nendobj\n');
+
+    offsets[id] = size;
+    chunks.push(header, object, footer);
+    size += header.length + object.length + footer.length;
   });
+
+  const xrefOffset = size;
+  const xref = [
+    'xref',
+    `0 ${objects.length + 1}`,
+    '0000000000 65535 f ',
+    ...objects.map((_, index) => `${String(offsets[index + 1]).padStart(10, '0')} 00000 n `),
+    'trailer',
+    `<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>`,
+    'startxref',
+    String(xrefOffset),
+    '%%EOF',
+    '',
+  ].join('\n');
+
+  chunks.push(Buffer.from(xref));
+
+  return Buffer.concat(chunks);
+}
+
+function reserveObject(objects) {
+  objects.push(Buffer.alloc(0));
+
+  return objects.length;
+}
+
+function addObject(objects, object) {
+  objects.push(object);
+
+  return objects.length;
+}
+
+function setObject(objects, id, object) {
+  objects[id - 1] = object;
 }
 
 function createCanvas(width, height, color) {
@@ -332,8 +333,21 @@ function createCanvas(width, height, color) {
   return rgba;
 }
 
+function rgbaToRgb(rgba) {
+  const rgb = Buffer.alloc((rgba.length / 4) * 3);
+
+  for (let source = 0, target = 0; source < rgba.length; source += 4, target += 3) {
+    rgb[target] = rgba[source];
+    rgb[target + 1] = rgba[source + 1];
+    rgb[target + 2] = rgba[source + 2];
+  }
+
+  return rgb;
+}
+
 function readPng(path) {
   const png = PNG.sync.read(readFileSync(path));
+
   return {
     path,
     width: png.width,
@@ -385,42 +399,8 @@ function drawImageScaled(target, targetWidth, targetHeight, image, x, y, width, 
   }
 }
 
-function fillRect(target, targetWidth, targetHeight, x, y, width, height, color) {
-  for (let row = y; row < y + height && row < targetHeight; row += 1) {
-    for (let col = x; col < x + width && col < targetWidth; col += 1) {
-      const index = (row * targetWidth + col) * 4;
-      target[index] = color.r;
-      target[index + 1] = color.g;
-      target[index + 2] = color.b;
-      target[index + 3] = 255;
-    }
-  }
-}
-
-function drawRectAlpha(target, targetWidth, targetHeight, x, y, width, height, color, alpha) {
-  for (let row = y; row < y + height && row < targetHeight; row += 1) {
-    for (let col = x; col < x + width && col < targetWidth; col += 1) {
-      if (col < 0 || row < 0) {
-        continue;
-      }
-
-      const index = (row * targetWidth + col) * 4;
-      target[index] = blend(color.r, target[index], alpha);
-      target[index + 1] = blend(color.g, target[index + 1], alpha);
-      target[index + 2] = blend(color.b, target[index + 2], alpha);
-      target[index + 3] = 255;
-    }
-  }
-}
-
 function blend(foreground, backgroundValue, alpha) {
   return Math.round(foreground * alpha + backgroundValue * (1 - alpha));
-}
-
-function easeInOutCubic(value) {
-  return value < 0.5
-    ? 4 * value * value * value
-    : 1 - Math.pow(-2 * value + 2, 3) / 2;
 }
 
 function scaledCss(value) {
