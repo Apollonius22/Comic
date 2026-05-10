@@ -1,5 +1,5 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild } from '@angular/core';
-import { PageFlip } from 'page-flip/dist/js/page-flip.module.js';
+import { PageFlip, type PageFlipEvent } from 'page-flip/dist/js/page-flip.module.js';
 
 type ComicPageRole =
   | 'front-cover'
@@ -12,6 +12,7 @@ type ComicPageDensity = 'hard' | 'soft';
 type ComicPageSide = 'left' | 'right';
 type ReaderFlipState = 'user_fold' | 'fold_corner' | 'flipping' | 'read';
 type ReaderVisualState = 'front-closed' | 'reading' | 'back-closed';
+type ReaderOrientation = 'portrait' | 'landscape';
 
 interface ComicPage {
   src?: string;
@@ -69,6 +70,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   currentIndex = 0;
   flipState: ReaderFlipState = 'read';
+  readerOrientation: ReaderOrientation = 'landscape';
   showUI = false;
   showMenu = false;
   gifExportAvailable = false;
@@ -185,6 +187,15 @@ export class HomePage implements AfterViewInit, OnDestroy {
       this.finishCoverTransitionIfReady(false);
     });
 
+    this.pageFlip.on('init', event => {
+      this.setReaderOrientation(event.data);
+    });
+
+    this.pageFlip.on('changeOrientation', event => {
+      this.setReaderOrientation(event.data);
+      this.requestBookLayoutUpdate();
+    });
+
     this.pageFlip.loadFromHTML(
       Array.from(this.bookHost.nativeElement.querySelectorAll<HTMLElement>('.book-page'))
     );
@@ -228,7 +239,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   get spreadEnd() {
-    return Math.min(this.currentIndex + 2, this.pages.length);
+    return Math.min(this.currentIndex + (this.isPortraitMode ? 1 : 2), this.pages.length);
   }
 
   get pageCount() {
@@ -268,7 +279,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
       ? this.underlayTargetIndex
       : this.currentIndex;
 
-    return this.getLogicalSpreadPages(index);
+    return this.getVisiblePages(index);
   }
 
   isContentPage(page: ComicPage) {
@@ -364,6 +375,20 @@ export class HomePage implements AfterViewInit, OnDestroy {
     return page?.role === 'content' || page?.role === 'blank';
   }
 
+  private get isPortraitMode() {
+    return this.readerOrientation === 'portrait';
+  }
+
+  private setReaderOrientation(data: PageFlipEvent['data']) {
+    const mode = typeof data === 'object' && data !== null && 'mode' in data
+      ? data.mode
+      : data;
+
+    if (mode === 'portrait' || mode === 'landscape') {
+      this.readerOrientation = mode;
+    }
+  }
+
   private requestBookLayoutUpdate() {
     if (this.layoutUpdateFrame) {
       window.cancelAnimationFrame(this.layoutUpdateFrame);
@@ -400,16 +425,20 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   private spreadShowsUnderlay(index: number) {
-    return this.getLogicalSpreadPages(index).some(page => this.shouldShowUnderlayBehind(page));
+    return this.getVisiblePages(index).some(page => this.shouldShowUnderlayBehind(page));
   }
 
-  private getLogicalSpreadPages(index: number) {
+  private getVisiblePages(index: number) {
     if (index <= 0) {
       return [this.pages[0]].filter((page): page is ComicPage => Boolean(page));
     }
 
     if (index >= this.lastIndex) {
       return [this.pages[this.lastIndex]].filter((page): page is ComicPage => Boolean(page));
+    }
+
+    if (this.isPortraitMode) {
+      return [this.pages[index]].filter((page): page is ComicPage => Boolean(page));
     }
 
     const spreadStart = index % 2 === 0 ? index - 1 : index;
@@ -420,6 +449,10 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   private getNextSpreadIndex(index: number) {
+    if (this.isPortraitMode) {
+      return Math.min(index + 1, this.lastIndex);
+    }
+
     if (index <= 0) {
       return Math.min(1, this.lastIndex);
     }
@@ -428,6 +461,10 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   private getPrevSpreadIndex(index: number) {
+    if (this.isPortraitMode) {
+      return Math.max(index - 1, 0);
+    }
+
     if (index <= 1) {
       return 0;
     }
