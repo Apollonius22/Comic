@@ -8,6 +8,7 @@ declare module 'page-flip/dist/js/page-flip.module.js' {
     constructor(element: HTMLElement, settings: Record<string, unknown>);
     destroy(): void;
     update(): void;
+    getOrientation(): 'portrait' | 'landscape';
     getCurrentPageIndex(): number;
     getPageCount(): number;
     loadFromHTML(items: HTMLElement[]): void;
