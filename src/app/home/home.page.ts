@@ -33,8 +33,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
   @ViewChild('bookHost', { static: true }) bookHost!: ElementRef<HTMLElement>;
 
   private readonly chapters = [
-    { folder: 'chapter1', pageCount: 31 },
-    { folder: 'chapter2', pageCount: 13 },
+    { folder: 'chapter1', firstPage: 0, lastPage: 31 },
+    { folder: 'chapter2', firstPage: 0, lastPage: 13 },
   ];
   private readonly contentPages = this.createContentPages();
 
@@ -93,24 +93,40 @@ export class HomePage implements AfterViewInit, OnDestroy {
     const pages: ComicPage[] = [];
 
     for (const chapter of this.chapters) {
-      pages.push(...this.createChapterPages(chapter.folder, chapter.pageCount, contentOffset));
-      contentOffset += chapter.pageCount;
+      const chapterPages = this.createChapterPages(
+        chapter.folder,
+        chapter.firstPage,
+        chapter.lastPage,
+        contentOffset,
+      );
+
+      pages.push(...chapterPages);
+      contentOffset += chapterPages.length;
     }
 
     return pages;
   }
 
-  private createChapterPages(chapter: string, count: number, contentOffset: number): ComicPage[] {
+  private createChapterPages(
+    chapter: string,
+    firstPage: number,
+    lastPage: number,
+    contentOffset: number
+  ): ComicPage[] {
     const chapterNumber = Number(chapter.match(/\d+/)?.[0] ?? 0);
+    const count = lastPage - firstPage + 1;
 
     return Array.from({ length: count }, (_, index) => {
       const contentIndex = contentOffset + index;
+      const pageNumber = firstPage + index;
 
       return {
-        src: `assets/comics/${chapter}/page_${index + 1}.png`,
+        src: `assets/comics/${chapter}/page_${pageNumber}.png`,
         role: 'content' as const,
         density: 'soft' as const,
-        alt: `Chapter ${chapterNumber} comic page ${index + 1}`,
+        alt: pageNumber === 0
+          ? `Chapter ${chapterNumber} cover page`
+          : `Chapter ${chapterNumber} comic page ${pageNumber}`,
         side: contentIndex % 2 === 0 ? 'right' as const : 'left' as const,
         spreadId: `chapter-${chapterNumber}-spread-${Math.floor(index / 2) + 1}`,
       };
