@@ -78,10 +78,12 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   private pageFlip?: PageFlip;
   private coverTransitionTimer?: number;
+  private layoutUpdateFrame?: number;
+  private layoutUpdateTimer?: number;
   private showUnderlayAfterCoverTransition = false;
   private underlayTargetIndex?: number;
   private readonly updateBookLayout = () => {
-    this.pageFlip?.update();
+    this.requestBookLayoutUpdate();
   };
 
   constructor() {
@@ -189,6 +191,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
     window.addEventListener('resize', this.updateBookLayout);
     window.addEventListener('orientationchange', this.updateBookLayout);
+    window.visualViewport?.addEventListener('resize', this.updateBookLayout);
+    this.requestBookLayoutUpdate();
   }
 
   private async checkGifExportAvailability() {
@@ -205,8 +209,17 @@ export class HomePage implements AfterViewInit, OnDestroy {
       window.clearTimeout(this.coverTransitionTimer);
     }
 
+    if (this.layoutUpdateFrame) {
+      window.cancelAnimationFrame(this.layoutUpdateFrame);
+    }
+
+    if (this.layoutUpdateTimer) {
+      window.clearTimeout(this.layoutUpdateTimer);
+    }
+
     window.removeEventListener('resize', this.updateBookLayout);
     window.removeEventListener('orientationchange', this.updateBookLayout);
+    window.visualViewport?.removeEventListener('resize', this.updateBookLayout);
     this.pageFlip?.destroy();
   }
 
@@ -349,6 +362,26 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   private shouldShowUnderlayBehind(page?: ComicPage) {
     return page?.role === 'content' || page?.role === 'blank';
+  }
+
+  private requestBookLayoutUpdate() {
+    if (this.layoutUpdateFrame) {
+      window.cancelAnimationFrame(this.layoutUpdateFrame);
+    }
+
+    this.layoutUpdateFrame = window.requestAnimationFrame(() => {
+      this.pageFlip?.update();
+      this.layoutUpdateFrame = undefined;
+    });
+
+    if (this.layoutUpdateTimer) {
+      window.clearTimeout(this.layoutUpdateTimer);
+    }
+
+    this.layoutUpdateTimer = window.setTimeout(() => {
+      this.pageFlip?.update();
+      this.layoutUpdateTimer = undefined;
+    }, 220);
   }
 
   private queuePageImages(centerIndex: number) {
