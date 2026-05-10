@@ -12,6 +12,7 @@ declare module 'page-flip/dist/js/page-flip.module.js' {
     getCurrentPageIndex(): number;
     getPageCount(): number;
     loadFromHTML(items: HTMLElement[]): void;
+    turnToPage(page: number): void;
     flipNext(corner?: FlipCorner): void;
     flipPrev(corner?: FlipCorner): void;
     on(eventName: string, callback: (event: PageFlipEvent) => void): PageFlip;

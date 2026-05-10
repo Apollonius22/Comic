@@ -160,9 +160,9 @@ export class HomePage implements AfterViewInit, OnDestroy {
       width: 520,
       height: 780,
       size: 'stretch',
-      minWidth: 240,
+      minWidth: 210,
       maxWidth: 520,
-      minHeight: 360,
+      minHeight: 315,
       maxHeight: 780,
       drawShadow: true,
       flippingTime: 1300,
@@ -267,10 +267,18 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   get showLeftUnderlay() {
+    if (this.isPortraitMode) {
+      return this.activeUnderlayPages.some(page => this.shouldShowUnderlayBehind(page));
+    }
+
     return this.shouldShowUnderlayBehind(this.activeUnderlayPages[0]);
   }
 
   get showRightUnderlay() {
+    if (this.isPortraitMode) {
+      return this.activeUnderlayPages.some(page => this.shouldShowUnderlayBehind(page));
+    }
+
     return this.shouldShowUnderlayBehind(this.activeUnderlayPages[1]);
   }
 
@@ -297,6 +305,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   nextPage() {
+    this.syncReaderOrientation();
     const index = this.pageFlip?.getCurrentPageIndex?.() ?? this.currentIndex;
     const targetIndex = this.getNextSpreadIndex(index);
 
@@ -307,9 +316,11 @@ export class HomePage implements AfterViewInit, OnDestroy {
     }
 
     this.pageFlip?.flipNext('bottom');
+    this.ensurePortraitNavigationCompletes(index, targetIndex);
   }
 
   prevPage() {
+    this.syncReaderOrientation();
     const index = this.pageFlip?.getCurrentPageIndex?.() ?? this.currentIndex;
     const targetIndex = this.getPrevSpreadIndex(index);
 
@@ -320,6 +331,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     }
 
     this.pageFlip?.flipPrev('bottom');
+    this.ensurePortraitNavigationCompletes(index, targetIndex);
   }
 
   private startCoverTransition(targetIndex: number) {
@@ -387,6 +399,30 @@ export class HomePage implements AfterViewInit, OnDestroy {
     if (mode === 'portrait' || mode === 'landscape') {
       this.readerOrientation = mode;
     }
+  }
+
+  private syncReaderOrientation() {
+    const mode = this.pageFlip?.getOrientation?.();
+
+    if (mode === 'portrait' || mode === 'landscape') {
+      this.readerOrientation = mode;
+    }
+  }
+
+  private ensurePortraitNavigationCompletes(startIndex: number, targetIndex: number) {
+    if (!this.isPortraitMode || startIndex === targetIndex) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      const currentIndex = this.pageFlip?.getCurrentPageIndex?.() ?? this.currentIndex;
+
+      if (this.flipState === 'flipping' || currentIndex !== startIndex) {
+        return;
+      }
+
+      this.pageFlip?.turnToPage(targetIndex);
+    }, 120);
   }
 
   private requestBookLayoutUpdate() {

@@ -34,16 +34,12 @@
       [attr.aria-expanded]="showMenu"
       (click)="toggleMenu()"
     >
-      <span class="dragon-neck neck-1"></span>
-      <span class="dragon-neck neck-2"></span>
-      <span class="dragon-neck neck-3"></span>
-      <span class="dragon-neck neck-4"></span>
-      <span class="dragon-neck neck-5"></span>
-      <span class="dragon-head head-1"></span>
-      <span class="dragon-head head-2"></span>
-      <span class="dragon-head head-3"></span>
-      <span class="dragon-head head-4"></span>
-      <span class="dragon-head head-5"></span>
+      <img
+        src="assets/ui/dragon-menu.png"
+        class="dragon-icon"
+        alt=""
+        aria-hidden="true"
+      />
     </button>
 
     @if (showMenu) {
