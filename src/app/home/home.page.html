@@ -111,25 +111,25 @@
         </div>
       }
     </div>
+
+    <button
+      type="button"
+      class="nav-button left"
+      aria-label="Previous pages"
+      (click)="prevPage(); $event.stopPropagation()"
+    >
+      ‹
+    </button>
+
+    <button
+      type="button"
+      class="nav-button right"
+      aria-label="Next pages"
+      (click)="nextPage(); $event.stopPropagation()"
+    >
+      ›
+    </button>
   </div>
-
-  <button
-    type="button"
-    class="nav-button left"
-    aria-label="Previous pages"
-    (click)="prevPage(); $event.stopPropagation()"
-  >
-    ‹
-  </button>
-
-  <button
-    type="button"
-    class="nav-button right"
-    aria-label="Next pages"
-    (click)="nextPage(); $event.stopPropagation()"
-  >
-    ›
-  </button>
 
   @if (showUI) {
     <div class="ui">

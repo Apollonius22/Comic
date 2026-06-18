@@ -35,7 +35,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   private readonly chapters = [
     { folder: 'chapter1', firstPage: 0, lastPage: 31 },
-    { folder: 'chapter2', firstPage: 0, lastPage: 13 },
+    { folder: 'chapter2', firstPage: 0, lastPage: 41 },
   ];
   private readonly contentPages = this.createContentPages();
 
@@ -316,7 +316,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     }
 
     this.pageFlip?.flipNext('bottom');
-    this.ensurePortraitNavigationCompletes(index, targetIndex);
+    this.ensureNavigationCompletes(index, targetIndex);
   }
 
   prevPage() {
@@ -331,7 +331,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     }
 
     this.pageFlip?.flipPrev('bottom');
-    this.ensurePortraitNavigationCompletes(index, targetIndex);
+    this.ensureNavigationCompletes(index, targetIndex);
   }
 
   private startCoverTransition(targetIndex: number) {
@@ -409,14 +409,17 @@ export class HomePage implements AfterViewInit, OnDestroy {
     }
   }
 
-  private ensurePortraitNavigationCompletes(startIndex: number, targetIndex: number) {
-    if (!this.isPortraitMode || startIndex === targetIndex) {
+  private ensureNavigationCompletes(startIndex: number, targetIndex: number) {
+    if (startIndex === targetIndex) {
       return;
     }
 
     window.setTimeout(() => {
       const currentIndex = this.pageFlip?.getCurrentPageIndex?.() ?? this.currentIndex;
 
+      // PageFlip can reject programmatic flips if its corner point falls outside
+      // the current responsive geometry. In that case, jump to the intended page
+      // instead of leaving the arrow feeling broken.
       if (this.flipState === 'flipping' || currentIndex !== startIndex) {
         return;
       }
