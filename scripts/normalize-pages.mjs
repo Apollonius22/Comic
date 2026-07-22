@@ -44,6 +44,7 @@ function getChapterFolders(comicsPath, requestedChapter) {
 
 function normalizeChapter(chapter) {
   const backup = join(chapter, '_original_sizes');
+  const fitMode = getChapterFitMode(chapter);
   const pages = readdirSync(chapter)
     .filter(file => /^page_\d+\.png$/i.test(file))
     .sort((a, b) => pageNumber(a) - pageNumber(b));
@@ -76,13 +77,17 @@ function normalizeChapter(chapter) {
     const seed = chapterNumber(chapter) * 1000 + pageNumber(file);
 
     fillPaperTexture(resized, 0, pageY, width, pageHeight, borderColor, seed, textureStrength);
-    drawCover(resized, image, safeBorder, pageY + safeBorder, artworkWidth, artworkHeight, contentScale);
+    drawArtwork(resized, image, safeBorder, pageY + safeBorder, artworkWidth, artworkHeight, contentScale, fitMode);
     writeFileSync(path, PNG.sync.write(resized));
   }
 
-  console.log(`${basename(chapter)}: normalized ${pages.length} pages`);
+  console.log(`${basename(chapter)}: normalized ${pages.length} pages (${fitMode})`);
 
   return pages.length;
+}
+
+function getChapterFitMode(chapter) {
+  return chapterNumber(chapter) === 3 ? 'contain' : 'cover';
 }
 
 function createPng(targetWidth, targetHeight, color) {
@@ -117,7 +122,16 @@ function fillPaperTexture(target, x, y, targetWidth, targetHeight, color, seed, 
   }
 }
 
-function drawCover(target, image, x, y, targetWidth, targetHeight, scaleMultiplier = 1) {
+function drawArtwork(target, image, x, y, targetWidth, targetHeight, scaleMultiplier = 1, fitMode = 'cover') {
+  if (fitMode === 'contain') {
+    drawContainedArtwork(target, image, x, y, targetWidth, targetHeight, scaleMultiplier);
+    return;
+  }
+
+  drawCoverArtwork(target, image, x, y, targetWidth, targetHeight, scaleMultiplier);
+}
+
+function drawCoverArtwork(target, image, x, y, targetWidth, targetHeight, scaleMultiplier = 1) {
   const scale = Math.max(targetWidth / image.width, targetHeight / image.height) * scaleMultiplier;
   const drawWidth = Math.max(1, Math.round(image.width * scale));
   const drawHeight = Math.max(1, Math.round(image.height * scale));
@@ -131,6 +145,30 @@ function drawCover(target, image, x, y, targetWidth, targetHeight, scaleMultipli
       const srcX = Math.min(image.width - 1, Math.max(0, Math.floor((col - offsetX + x) / scale)));
       const srcIndex = (srcY * image.width + srcX) * 4;
       const dstIndex = ((y + row) * target.width + x + col) * 4;
+      const alpha = image.data[srcIndex + 3] / 255;
+
+      target.data[dstIndex] = blend(image.data[srcIndex], target.data[dstIndex], alpha);
+      target.data[dstIndex + 1] = blend(image.data[srcIndex + 1], target.data[dstIndex + 1], alpha);
+      target.data[dstIndex + 2] = blend(image.data[srcIndex + 2], target.data[dstIndex + 2], alpha);
+      target.data[dstIndex + 3] = 255;
+    }
+  }
+}
+
+function drawContainedArtwork(target, image, x, y, targetWidth, targetHeight, scaleMultiplier = 1) {
+  const scale = Math.min(targetWidth / image.width, targetHeight / image.height) * scaleMultiplier;
+  const drawWidth = Math.max(1, Math.round(image.width * scale));
+  const drawHeight = Math.max(1, Math.round(image.height * scale));
+  const offsetX = x + Math.floor((targetWidth - drawWidth) / 2);
+  const offsetY = y + Math.floor((targetHeight - drawHeight) / 2);
+
+  for (let row = 0; row < drawHeight; row += 1) {
+    const srcY = Math.min(image.height - 1, Math.max(0, Math.floor(row / scale)));
+
+    for (let col = 0; col < drawWidth; col += 1) {
+      const srcX = Math.min(image.width - 1, Math.max(0, Math.floor(col / scale)));
+      const srcIndex = (srcY * image.width + srcX) * 4;
+      const dstIndex = ((offsetY + row) * target.width + offsetX + col) * 4;
       const alpha = image.data[srcIndex + 3] / 255;
 
       target.data[dstIndex] = blend(image.data[srcIndex], target.data[dstIndex], alpha);

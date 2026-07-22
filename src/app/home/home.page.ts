@@ -35,7 +35,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   private readonly chapters = [
     { folder: 'chapter1', firstPage: 0, lastPage: 31 },
-    { folder: 'chapter2', firstPage: 0, lastPage: 41 },
+    { folder: 'chapter2', firstPage: 0, lastPage: 60 },
+    { folder: 'chapter3', firstPage: 0, lastPage: 50 },
   ];
   private readonly contentPages = this.createContentPages();
 
