@@ -1,5 +1,6 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild } from '@angular/core';
 import { PageFlip, type PageFlipEvent } from 'page-flip/dist/js/page-flip.module.js';
+import { COMIC_CHAPTERS } from './comic-manifest.generated';
 
 type ComicPageRole =
   | 'front-cover'
@@ -16,12 +17,18 @@ type ReaderOrientation = 'portrait' | 'landscape';
 
 interface ComicPage {
   src?: string;
+  mobileSrc?: string;
   spreadSrc?: string;
   role: ComicPageRole;
   density: ComicPageDensity;
   alt: string;
   side?: ComicPageSide;
   spreadId?: string;
+}
+
+interface ChapterMarker {
+  title: string;
+  pageIndex: number;
 }
 
 @Component({
@@ -33,22 +40,21 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   @ViewChild('bookHost', { static: true }) bookHost!: ElementRef<HTMLElement>;
 
-  private readonly chapters = [
-    { folder: 'chapter1', firstPage: 0, lastPage: 31 },
-    { folder: 'chapter2', firstPage: 0, lastPage: 60 },
-    { folder: 'chapter3', firstPage: 0, lastPage: 50 },
-  ];
+  private readonly chapters = COMIC_CHAPTERS;
+  readonly chapterMarkers = this.createChapterMarkers();
   private readonly contentPages = this.createContentPages();
 
   pages: ComicPage[] = [
     {
-      src: 'assets/comics/bookends/cover.png',
+      src: 'assets/comics/web/desktop/bookends/cover-desktop.webp',
+      mobileSrc: 'assets/comics/web/mobile/bookends/cover-mobile.webp',
       role: 'front-cover',
       density: 'hard',
       alt: 'Front cover',
     },
     {
-      src: 'assets/comics/bookends/inside_left.png',
+      src: 'assets/comics/web/desktop/bookends/inside_left-desktop.webp',
+      mobileSrc: 'assets/comics/web/mobile/bookends/inside_left-mobile.webp',
       role: 'inside-cover',
       density: 'hard',
       alt: 'Inside front cover',
@@ -56,13 +62,15 @@ export class HomePage implements AfterViewInit, OnDestroy {
     ...this.contentPages,
     ...this.createBlankPageIfNeeded(this.contentPages.length),
     {
-      src: 'assets/comics/bookends/inside_right.png',
+      src: 'assets/comics/web/desktop/bookends/inside_right-desktop.webp',
+      mobileSrc: 'assets/comics/web/mobile/bookends/inside_right-mobile.webp',
       role: 'inside-cover',
       density: 'hard',
       alt: 'Inside back cover',
     },
     {
-      src: 'assets/comics/bookends/end.png',
+      src: 'assets/comics/web/desktop/bookends/end-desktop.webp',
+      mobileSrc: 'assets/comics/web/mobile/bookends/end-mobile.webp',
       role: 'back-cover',
       density: 'hard',
       alt: 'Back cover',
@@ -74,7 +82,6 @@ export class HomePage implements AfterViewInit, OnDestroy {
   readerOrientation: ReaderOrientation = 'landscape';
   showUI = false;
   showMenu = false;
-  gifExportAvailable = false;
   isOpeningCover = false;
   isCoverTransitioning = false;
   loadedPageIndexes = new Set<number>();
@@ -91,6 +98,20 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   constructor() {
     this.queuePageImages(0);
+  }
+
+  private createChapterMarkers(): ChapterMarker[] {
+    let pageIndex = 2;
+
+    return this.chapters.map(chapter => {
+      const marker = {
+        title: chapter.title,
+        pageIndex,
+      };
+
+      pageIndex += chapter.pageCount;
+      return marker;
+    });
   }
 
   private createContentPages(): ComicPage[] {
@@ -126,7 +147,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
       const pageNumber = firstPage + index;
 
       return {
-        src: `assets/comics/${chapter}/page_${pageNumber}.png`,
+        src: `assets/comics/web/desktop/${chapter}/page_${pageNumber}.webp`,
+        mobileSrc: `assets/comics/web/mobile/${chapter}/page_${pageNumber}.webp`,
         role: 'content' as const,
         density: 'soft' as const,
         alt: pageNumber === 0
@@ -145,7 +167,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
     return [
       {
-        src: 'assets/comics/bookends/blank.png',
+        src: 'assets/comics/web/desktop/bookends/blank-desktop.webp',
+        mobileSrc: 'assets/comics/web/mobile/bookends/blank-mobile.webp',
         role: 'blank',
         density: 'soft',
         alt: 'Blank page',
@@ -155,8 +178,6 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    this.checkGifExportAvailability();
-
     this.pageFlip = new PageFlip(this.bookHost.nativeElement, {
       width: 520,
       height: 780,
@@ -205,15 +226,6 @@ export class HomePage implements AfterViewInit, OnDestroy {
     window.addEventListener('orientationchange', this.updateBookLayout);
     window.visualViewport?.addEventListener('resize', this.updateBookLayout);
     this.requestBookLayoutUpdate();
-  }
-
-  private async checkGifExportAvailability() {
-    try {
-      const response = await fetch('assets/exports/comic.gif', { method: 'HEAD' });
-      this.gifExportAvailable = response.ok;
-    } catch {
-      this.gifExportAvailable = false;
-    }
   }
 
   ngOnDestroy() {
@@ -303,6 +315,18 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   getPageSrc(page: ComicPage, index: number) {
     return this.loadedPageIndexes.has(index) ? page.src : undefined;
+  }
+
+  getMobilePageSrc(page: ComicPage, index: number) {
+    return this.loadedPageIndexes.has(index) ? page.mobileSrc : undefined;
+  }
+
+  jumpToChapter(marker: ChapterMarker) {
+    this.queuePageImages(marker.pageIndex);
+    this.currentIndex = marker.pageIndex;
+    this.showMenu = false;
+    this.pageFlip?.turnToPage(marker.pageIndex);
+    this.requestBookLayoutUpdate();
   }
 
   nextPage() {

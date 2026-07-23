@@ -107,12 +107,12 @@
 
 .underlay-left {
   left: 0;
-  background-image: url('../../assets/comics/bookends/inside_left.png');
+  background-image: url('../../assets/comics/web/desktop/bookends/inside_left-desktop.webp');
 }
 
 .underlay-right {
   right: 0;
-  background-image: url('../../assets/comics/bookends/inside_right.png');
+  background-image: url('../../assets/comics/web/desktop/bookends/inside_right-desktop.webp');
 }
 
 .book {
@@ -135,11 +135,15 @@
   overflow: hidden;
 }
 
+.page-picture,
 .page-image {
   width: 100%;
   height: 100%;
-  object-fit: contain;
   display: block;
+}
+
+.page-image {
+  object-fit: contain;
   -webkit-user-drag: none;
   user-select: none;
 }
@@ -189,10 +193,14 @@
     box-shadow: none;
   }
 
-  .page-image,
+  .page-picture,
   .spread-half {
     width: 100%;
     height: 92%;
+  }
+
+  .page-picture .page-image {
+    height: 100%;
   }
 }
 
@@ -211,9 +219,13 @@
     background: transparent;
   }
 
-  .page-image {
+  .page-picture {
     width: 92%;
     height: 92%;
+  }
+
+  .page-picture .page-image {
+    height: 100%;
   }
 }
 
@@ -294,11 +306,17 @@
 
 .menu-item {
   display: block;
+  width: 100%;
   padding: 10px 12px;
+  border: 0;
   border-radius: 6px;
+  background: transparent;
   color: #f8e8c5;
+  font: inherit;
   font-size: 14px;
+  text-align: left;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .menu-item:hover {
@@ -432,6 +450,16 @@
 
   .nav-button.right {
     right: 6px;
+  }
+}
+
+@media (max-width: 900px) {
+  .underlay-left {
+    background-image: url('../../assets/comics/web/mobile/bookends/inside_left-mobile.webp');
+  }
+
+  .underlay-right {
+    background-image: url('../../assets/comics/web/mobile/bookends/inside_right-mobile.webp');
   }
 }
 

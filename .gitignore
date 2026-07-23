@@ -84,3 +84,7 @@ Thumbs.db
 
 # Local workspace for regenerating/replacing comic images
 /regeneration/
+
+# Temporary optimizer publish directories
+/src/assets/comics/.web-build-*/
+/src/assets/comics/.web-previous-*/

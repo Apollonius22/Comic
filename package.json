@@ -6,8 +6,8 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "npm run export:pdf && ng build",
-    "build:pages": "npm run export:pdf && ng build --base-href /Comic/",
+    "build": "ng build",
+    "build:pages": "ng build && node scripts/set-pages-base-href.mjs /Comic/",
     "build:full": "npm run export:pdf && npm run export:gif && ng build && npm run copy:gif",
     "watch": "ng build --watch --configuration development",
     "export:pdf": "node scripts/export-pdf.mjs",
@@ -15,6 +15,7 @@
     "copy:gif": "node scripts/copy-gif-export.mjs",
     "outline:pages": "node scripts/apply-page-outline.mjs",
     "normalize:pages": "node scripts/normalize-pages.mjs",
+    "optimize:pages": "node scripts/optimize-comic-pages.mjs",
     "split:inside": "node scripts/split-inside-cover.mjs",
     "test": "ng test",
     "lint": "ng lint"
@@ -69,6 +70,7 @@
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
     "pngjs": "^7.0.0",
+    "sharp": "^0.35.3",
     "typescript": "~5.9.0"
   },
   "description": "An Ionic project"

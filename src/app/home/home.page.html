@@ -43,24 +43,17 @@
     </button>
 
     @if (showMenu) {
-      <div class="menu-panel">
-        <a
-          class="menu-item"
-          href="assets/exports/comic.pdf"
-          download="comic-flipbook.pdf"
-        >
-          Export as flipbook PDF
-        </a>
-        @if (gifExportAvailable) {
-          <a
+      <nav class="menu-panel" aria-label="Comic chapters">
+        @for (marker of chapterMarkers; track marker.pageIndex) {
+          <button
+            type="button"
             class="menu-item"
-            href="assets/exports/comic.gif"
-            download="comic-flipbook.gif"
+            (click)="jumpToChapter(marker)"
           >
-            Export as animated GIF
-          </a>
+            {{ marker.title }}
+          </button>
         }
-      </div>
+      </nav>
     }
   </div>
 
@@ -96,13 +89,23 @@
                   [style.background-image]="'url(' + page.spreadSrc + ')'"
                 ></div>
               } @else if (getPageSrc(page, $index); as pageSrc) {
-                <img
-                  [src]="pageSrc"
-                  class="page-image"
-                  [alt]="page.alt"
-                  loading="lazy"
-                  decoding="async"
-                />
+                <picture class="page-picture">
+                  @if (getMobilePageSrc(page, $index); as mobilePageSrc) {
+                    <source
+                      media="(max-width: 900px)"
+                      [srcset]="mobilePageSrc"
+                      type="image/webp"
+                    />
+                  }
+                  <img
+                    [src]="pageSrc"
+                    class="page-image"
+                    [alt]="page.alt"
+                    [attr.loading]="$index <= 1 ? 'eager' : 'lazy'"
+                    [attr.fetchpriority]="$index === 0 ? 'high' : null"
+                    decoding="async"
+                  />
+                </picture>
               } @else {
                 <div class="page-placeholder" aria-hidden="true"></div>
               }
