@@ -64,6 +64,11 @@ function normalizeChapter(chapter) {
       writeFileSync(backupPath, PNG.sync.write(image));
     }
 
+    if (image.width === width && image.height === height) {
+      writeFileSync(path, PNG.sync.write(image));
+      continue;
+    }
+
     const resized = createPng(width, height, background);
     const pageHeight = Math.round(height * pageHeightScale);
     const pageY = height - pageHeight;
@@ -87,7 +92,7 @@ function normalizeChapter(chapter) {
 }
 
 function getChapterFitMode(chapter) {
-  return chapterNumber(chapter) === 3 ? 'contain' : 'cover';
+  return 'cover';
 }
 
 function createPng(targetWidth, targetHeight, color) {

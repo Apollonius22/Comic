@@ -13,6 +13,7 @@
     "export:pdf": "node scripts/export-pdf.mjs",
     "export:gif": "node scripts/export-gif.mjs",
     "copy:gif": "node scripts/copy-gif-export.mjs",
+    "outline:pages": "node scripts/apply-page-outline.mjs",
     "normalize:pages": "node scripts/normalize-pages.mjs",
     "split:inside": "node scripts/split-inside-cover.mjs",
     "test": "ng test",
