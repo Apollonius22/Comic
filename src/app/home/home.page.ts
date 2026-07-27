@@ -112,6 +112,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private swipeFallbackTimer?: number;
   private portraitSwipeStart?: PortraitSwipeStart;
   private nativeFullscreenActive = false;
+  private suppressBookClickUntil = 0;
   private readonly prefetchedPageSources = new Set<string>();
   private readonly activePagePrefetches = new Map<string, HTMLImageElement>();
   private showUnderlayAfterCoverTransition = false;
@@ -225,9 +226,9 @@ export class HomePage implements AfterViewInit, OnDestroy {
       // Keep modern phones in portrait mode while allowing the page to use
       // their full width. Landscape phones still have enough room for a spread.
       minWidth: 230,
-      maxWidth: 520,
+      maxWidth: 700,
       minHeight: 220,
-      maxHeight: 780,
+      maxHeight: 1050,
       drawShadow: true,
       flippingTime: 1300,
       usePortrait: !this.shouldForceLandscapeSpread(),
@@ -510,6 +511,10 @@ export class HomePage implements AfterViewInit, OnDestroy {
       return;
     }
 
+    // Mobile browsers can emit a click after a swipe. Ignore that click so a
+    // page gesture never unexpectedly toggles the navigation controls.
+    this.suppressBookClickUntil = Date.now() + 650;
+
     if (this.swipeFallbackTimer) {
       window.clearTimeout(this.swipeFallbackTimer);
     }
@@ -650,14 +655,24 @@ export class HomePage implements AfterViewInit, OnDestroy {
     window.setTimeout(() => {
       const currentIndex = this.pageFlip?.getCurrentPageIndex?.() ?? this.currentIndex;
 
-      // PageFlip can reject programmatic flips if its corner point falls outside
-      // the current responsive geometry. In that case, jump to the intended page
-      // instead of leaving the arrow feeling broken.
-      if (this.flipState === 'flipping' || currentIndex !== startIndex) {
+      // Do not interrupt an active fold with an immediate page jump.
+      if (this.flipState !== 'read' || currentIndex !== startIndex) {
         return;
       }
 
-      this.pageFlip?.turnToPage(targetIndex);
+      if (targetIndex < startIndex) {
+        this.pageFlip?.flipPrev('bottom');
+      } else {
+        this.pageFlip?.flipNext('bottom');
+      }
+
+      window.setTimeout(() => {
+        const retryIndex = this.pageFlip?.getCurrentPageIndex?.() ?? this.currentIndex;
+
+        if (this.flipState === 'read' && retryIndex === startIndex) {
+          this.pageFlip?.turnToPage(targetIndex);
+        }
+      }, 180);
     }, 120);
   }
 
@@ -848,14 +863,38 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   onReaderBackgroundClick() {
+    if (!this.showPageNavigation) {
+      return;
+    }
+
     this.showPageNavigation = false;
+    this.requestBookLayoutUpdate();
   }
 
   onBookClick() {
-    this.showPageNavigation = true;
+    if (Date.now() < this.suppressBookClickUntil) {
+      this.suppressBookClickUntil = 0;
+      return;
+    }
+
+    const showNavigation = this.isMobileReaderViewport()
+      ? !this.showPageNavigation
+      : true;
+
+    if (showNavigation === this.showPageNavigation) {
+      return;
+    }
+
+    this.showPageNavigation = showNavigation;
+    this.requestBookLayoutUpdate();
   }
 
   toggleMenu() {
     this.showMenu = !this.showMenu;
+  }
+
+  private isMobileReaderViewport() {
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    return viewportWidth <= 980;
   }
 }

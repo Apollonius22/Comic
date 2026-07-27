@@ -23,6 +23,18 @@
   padding-bottom: 92px;
 }
 
+@media (min-width: 981px) {
+  .reader.reader-fullscreen:not(.navigation-visible) {
+    padding: 4px;
+
+    .book-shell {
+      width: min(100%, 1400px);
+      max-width: calc(100vw - 8px);
+      max-height: calc(100dvh - 8px);
+    }
+  }
+}
+
 .magic-backdrop {
   position: absolute;
   inset: 0;
@@ -402,7 +414,7 @@
       max(10px, env(safe-area-inset-left));
   }
 
-  .reader.reader-fullscreen:not(.navigation-visible) {
+  .reader:not(.navigation-visible) {
     padding-right: max(2px, env(safe-area-inset-right));
     padding-left: max(2px, env(safe-area-inset-left));
   }
