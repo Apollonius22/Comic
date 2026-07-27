@@ -31,6 +31,22 @@ interface ChapterMarker {
   pageIndex: number;
 }
 
+interface WebkitFullscreenDocument extends Document {
+  webkitFullscreenElement?: Element;
+  webkitExitFullscreen?: () => Promise<void> | void;
+}
+
+interface WebkitFullscreenElement extends HTMLElement {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+}
+
+interface PortraitSwipeStart {
+  touchId: number;
+  x: number;
+  y: number;
+  pageIndex: number;
+}
+
 @Component({
   selector: 'app-home',
   templateUrl: 'home.page.html',
@@ -38,6 +54,7 @@ interface ChapterMarker {
 })
 export class HomePage implements AfterViewInit, OnDestroy {
 
+  @ViewChild('readerHost', { static: true }) readerHost!: ElementRef<HTMLElement>;
   @ViewChild('bookHost', { static: true }) bookHost!: ElementRef<HTMLElement>;
 
   private readonly chapters = COMIC_CHAPTERS;
@@ -82,6 +99,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   flipState: ReaderFlipState = 'read';
   readerOrientation: ReaderOrientation = this.getInitialReaderOrientation();
   showPageNavigation = true;
+  isFullscreen = false;
   showMenu = false;
   isOpeningCover = false;
   isCoverTransitioning = false;
@@ -91,6 +109,9 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private coverTransitionTimer?: number;
   private layoutUpdateFrame?: number;
   private layoutUpdateTimer?: number;
+  private swipeFallbackTimer?: number;
+  private portraitSwipeStart?: PortraitSwipeStart;
+  private nativeFullscreenActive = false;
   private readonly prefetchedPageSources = new Set<string>();
   private readonly activePagePrefetches = new Map<string, HTMLImageElement>();
   private showUnderlayAfterCoverTransition = false;
@@ -98,6 +119,20 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private readonly updateBookLayout = () => {
     this.applyResponsivePageFlipMode();
     this.prefetchCurrentAndNextPages(this.currentIndex);
+    this.requestBookLayoutUpdate();
+  };
+  private readonly syncFullscreenState = () => {
+    const fullscreenElement = this.getFullscreenElement();
+
+    if (fullscreenElement) {
+      this.nativeFullscreenActive = true;
+      this.isFullscreen = true;
+    } else if (this.nativeFullscreenActive) {
+      this.nativeFullscreenActive = false;
+      this.isFullscreen = false;
+      this.showPageNavigation = true;
+    }
+
     this.requestBookLayoutUpdate();
   };
 
@@ -233,6 +268,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
     window.addEventListener('resize', this.updateBookLayout);
     window.addEventListener('orientationchange', this.updateBookLayout);
     window.visualViewport?.addEventListener('resize', this.updateBookLayout);
+    document.addEventListener('fullscreenchange', this.syncFullscreenState);
+    document.addEventListener('webkitfullscreenchange', this.syncFullscreenState);
     this.requestBookLayoutUpdate();
   }
 
@@ -249,9 +286,15 @@ export class HomePage implements AfterViewInit, OnDestroy {
       window.clearTimeout(this.layoutUpdateTimer);
     }
 
+    if (this.swipeFallbackTimer) {
+      window.clearTimeout(this.swipeFallbackTimer);
+    }
+
     window.removeEventListener('resize', this.updateBookLayout);
     window.removeEventListener('orientationchange', this.updateBookLayout);
     window.visualViewport?.removeEventListener('resize', this.updateBookLayout);
+    document.removeEventListener('fullscreenchange', this.syncFullscreenState);
+    document.removeEventListener('webkitfullscreenchange', this.syncFullscreenState);
     this.pageFlip?.destroy();
   }
 
@@ -364,6 +407,134 @@ export class HomePage implements AfterViewInit, OnDestroy {
     this.currentIndex = targetIndex;
     this.pageFlip?.turnToPage(targetIndex);
     this.requestBookLayoutUpdate();
+  }
+
+  async toggleFullscreen() {
+    const fullscreenElement = this.getFullscreenElement();
+    const webkitDocument = document as WebkitFullscreenDocument;
+
+    if (fullscreenElement) {
+      try {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else {
+          await Promise.resolve(webkitDocument.webkitExitFullscreen?.());
+        }
+      } finally {
+        this.nativeFullscreenActive = false;
+        this.isFullscreen = false;
+        this.showPageNavigation = true;
+        this.requestBookLayoutUpdate();
+      }
+
+      return;
+    }
+
+    if (this.isFullscreen) {
+      this.isFullscreen = false;
+      this.showPageNavigation = true;
+      this.requestBookLayoutUpdate();
+      return;
+    }
+
+    this.isFullscreen = true;
+    this.showPageNavigation = false;
+    this.requestBookLayoutUpdate();
+
+    const reader = this.readerHost.nativeElement as WebkitFullscreenElement;
+
+    try {
+      if (reader.requestFullscreen) {
+        await reader.requestFullscreen({ navigationUI: 'hide' });
+      } else if (reader.webkitRequestFullscreen) {
+        await Promise.resolve(reader.webkitRequestFullscreen());
+      }
+
+      this.nativeFullscreenActive = Boolean(this.getFullscreenElement());
+    } catch {
+      // Keep the CSS immersive mode as a fallback on browsers without
+      // element fullscreen support, including some iPhone Safari versions.
+      this.nativeFullscreenActive = false;
+    }
+  }
+
+  onBookTouchStart(event: TouchEvent) {
+    if (!this.isSinglePageView || event.touches.length !== 1) {
+      return;
+    }
+
+    const touch = event.touches.item(0);
+
+    if (!touch) {
+      return;
+    }
+
+    this.portraitSwipeStart = {
+      touchId: touch.identifier,
+      x: touch.clientX,
+      y: touch.clientY,
+      pageIndex: this.pageFlip?.getCurrentPageIndex?.() ?? this.currentIndex,
+    };
+  }
+
+  onBookTouchEnd(event: TouchEvent) {
+    const start = this.portraitSwipeStart;
+    this.portraitSwipeStart = undefined;
+
+    if (!start || !this.isSinglePageView) {
+      return;
+    }
+
+    let touch: Touch | null = null;
+
+    for (let index = 0; index < event.changedTouches.length; index += 1) {
+      const changedTouch = event.changedTouches.item(index);
+
+      if (changedTouch?.identifier === start.touchId) {
+        touch = changedTouch;
+        break;
+      }
+    }
+
+    if (!touch) {
+      return;
+    }
+
+    const horizontalDistance = touch.clientX - start.x;
+    const verticalDistance = touch.clientY - start.y;
+
+    if (
+      Math.abs(horizontalDistance) < 48
+      || Math.abs(horizontalDistance) <= Math.abs(verticalDistance) * 1.2
+    ) {
+      return;
+    }
+
+    if (this.swipeFallbackTimer) {
+      window.clearTimeout(this.swipeFallbackTimer);
+    }
+
+    this.swipeFallbackTimer = window.setTimeout(() => {
+      this.swipeFallbackTimer = undefined;
+
+      const currentIndex = this.pageFlip?.getCurrentPageIndex?.() ?? this.currentIndex;
+
+      // PageFlip handles most swipes itself. Only navigate when it ignored the
+      // gesture, preventing one swipe from advancing two pages.
+      if (currentIndex !== start.pageIndex || this.flipState === 'flipping') {
+        return;
+      }
+
+      if (horizontalDistance < 0 && this.canGoNext) {
+        this.nextPage();
+      } else if (horizontalDistance > 0 && this.canGoPrevious) {
+        this.prevPage();
+      }
+    }, 100);
+  }
+
+  cancelBookSwipe() {
+    this.portraitSwipeStart = undefined;
   }
 
   nextPage() {
@@ -545,6 +716,11 @@ export class HomePage implements AfterViewInit, OnDestroy {
     const viewportHeight = viewport?.height ?? window.innerHeight;
 
     return viewportWidth <= 980 && viewportWidth > viewportHeight;
+  }
+
+  private getFullscreenElement() {
+    const webkitDocument = document as WebkitFullscreenDocument;
+    return document.fullscreenElement ?? webkitDocument.webkitFullscreenElement ?? null;
   }
 
   private queuePageImages(centerIndex: number) {

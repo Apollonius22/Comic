@@ -1,6 +1,9 @@
 <div
+  #readerHost
   class="reader"
   [class.single-page-view]="isSinglePageView"
+  [class.navigation-visible]="showPageNavigation"
+  [class.reader-fullscreen]="isFullscreen"
   (click)="onReaderBackgroundClick()"
 >
   <div class="magic-backdrop" aria-hidden="true">
@@ -64,6 +67,9 @@
   <div
     class="book-shell"
     [class.is-reading]="showReadingUnderlay"
+    (touchstart)="onBookTouchStart($event)"
+    (touchend)="onBookTouchEnd($event)"
+    (touchcancel)="cancelBookSwipe()"
     (click)="onBookClick(); $event.stopPropagation()"
   >
     <div class="underlay underlay-left" [class.visible]="showLeftUnderlay"></div>
@@ -162,6 +168,20 @@
         (change)="commitPageScrub($event)"
       />
     </div>
+
+    <button
+      type="button"
+      class="page-fullscreen-button"
+      [class.is-active]="isFullscreen"
+      [attr.aria-label]="isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'"
+      [attr.aria-pressed]="isFullscreen"
+      (click)="toggleFullscreen()"
+    >
+      <span class="fullscreen-corner top-left" aria-hidden="true"></span>
+      <span class="fullscreen-corner top-right" aria-hidden="true"></span>
+      <span class="fullscreen-corner bottom-left" aria-hidden="true"></span>
+      <span class="fullscreen-corner bottom-right" aria-hidden="true"></span>
+    </button>
 
     <button
       type="button"
