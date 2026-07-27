@@ -123,54 +123,35 @@
       }
     </div>
 
-    <button
-      type="button"
-      class="nav-button left"
-      aria-label="Previous pages"
-      [disabled]="!canGoPrevious"
-      (click)="prevPage(); $event.stopPropagation()"
-    >
-      ‹
-    </button>
-
-    <button
-      type="button"
-      class="nav-button right"
-      aria-label="Next pages"
-      [disabled]="!canGoNext"
-      (click)="nextPage(); $event.stopPropagation()"
-    >
-      ›
-    </button>
   </div>
 
   <nav
-    class="mobile-page-nav"
-    [class.controls-visible]="showMobileNavigation"
-    [attr.aria-hidden]="!showMobileNavigation"
-    [attr.inert]="showMobileNavigation ? null : ''"
+    class="page-navigation"
+    [class.controls-visible]="showPageNavigation"
+    [attr.aria-hidden]="!showPageNavigation"
+    [attr.inert]="showPageNavigation ? null : ''"
     aria-label="Page navigation"
     (click)="$event.stopPropagation()"
   >
     <button
       type="button"
-      class="mobile-nav-button"
-      aria-label="Previous page"
+      class="page-navigation-button"
+      aria-label="Previous page or spread"
       [disabled]="!canGoPrevious"
       (click)="prevPage()"
     >
       ‹
     </button>
 
-    <div class="mobile-page-scrubber">
-      <div class="mobile-page-progress" aria-live="polite">
-        <span class="mobile-page-current">{{ scrubTargetIndex + 1 }}</span>
-        <span class="mobile-page-total">of {{ pages.length }}</span>
+    <div class="page-navigation-scrubber">
+      <div class="page-navigation-progress" aria-live="polite">
+        <span class="page-navigation-current">{{ scrubTargetIndex + 1 }}</span>
+        <span class="page-navigation-total">of {{ pages.length }}</span>
       </div>
 
       <input
         type="range"
-        class="mobile-page-slider"
+        class="page-navigation-slider"
         aria-label="Jump to comic page"
         [attr.aria-valuetext]="'Page ' + (scrubTargetIndex + 1) + ' of ' + pages.length"
         min="0"
@@ -184,19 +165,13 @@
 
     <button
       type="button"
-      class="mobile-nav-button"
-      aria-label="Next page"
+      class="page-navigation-button"
+      aria-label="Next page or spread"
       [disabled]="!canGoNext"
       (click)="nextPage()"
     >
       ›
     </button>
   </nav>
-
-  @if (showUI) {
-    <div class="ui">
-      {{ spreadStart }}-{{ spreadEnd }} / {{ pages.length }}
-    </div>
-  }
 
 </div>
