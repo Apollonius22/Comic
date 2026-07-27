@@ -82,6 +82,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   flipState: ReaderFlipState = 'read';
   readerOrientation: ReaderOrientation = this.getInitialReaderOrientation();
   showUI = false;
+  showMobileNavigation = true;
   showMenu = false;
   isOpeningCover = false;
   isCoverTransitioning = false;
@@ -673,6 +674,16 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   toggleUI() {
     this.showUI = !this.showUI;
+  }
+
+  onReaderBackgroundClick() {
+    this.showMobileNavigation = false;
+    this.toggleUI();
+  }
+
+  onBookClick() {
+    this.showMobileNavigation = true;
+    this.toggleUI();
   }
 
   toggleMenu() {

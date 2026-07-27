@@ -509,7 +509,22 @@
       0 14px 36px rgba(0, 0, 0, 0.42),
       0 0 22px rgba(212, 155, 72, 0.12);
     backdrop-filter: blur(12px);
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, calc(100% + 18px));
+    transition:
+      opacity 180ms ease,
+      transform 240ms ease,
+      visibility 0s linear 240ms;
+  }
+
+  .mobile-page-nav.controls-visible {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
     transform: translateX(-50%);
+    transition-delay: 0s;
   }
 
   .mobile-nav-button {

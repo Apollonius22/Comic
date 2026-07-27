@@ -1,7 +1,7 @@
 <div
   class="reader"
   [class.single-page-view]="isSinglePageView"
-  (click)="toggleUI()"
+  (click)="onReaderBackgroundClick()"
 >
   <div class="magic-backdrop" aria-hidden="true">
     <span class="magic-mote" style="--x: 18%; --y: 74%; --s: 4px; --d: 8s; --delay: -1s"></span>
@@ -61,7 +61,11 @@
     }
   </div>
 
-  <div class="book-shell" [class.is-reading]="showReadingUnderlay">
+  <div
+    class="book-shell"
+    [class.is-reading]="showReadingUnderlay"
+    (click)="onBookClick(); $event.stopPropagation()"
+  >
     <div class="underlay underlay-left" [class.visible]="showLeftUnderlay"></div>
     <div class="underlay underlay-right" [class.visible]="showRightUnderlay"></div>
 
@@ -142,6 +146,9 @@
 
   <nav
     class="mobile-page-nav"
+    [class.controls-visible]="showMobileNavigation"
+    [attr.aria-hidden]="!showMobileNavigation"
+    [attr.inert]="showMobileNavigation ? null : ''"
     aria-label="Page navigation"
     (click)="$event.stopPropagation()"
   >
