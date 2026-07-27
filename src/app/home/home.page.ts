@@ -95,6 +95,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private showUnderlayAfterCoverTransition = false;
   private underlayTargetIndex?: number;
   private readonly updateBookLayout = () => {
+    this.applyResponsivePageFlipMode();
     this.prefetchCurrentAndNextPages(this.currentIndex);
     this.requestBookLayoutUpdate();
   };
@@ -193,7 +194,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
       maxHeight: 780,
       drawShadow: true,
       flippingTime: 1300,
-      usePortrait: true,
+      usePortrait: !this.shouldForceLandscapeSpread(),
       startZIndex: 10,
       autoSize: true,
       maxShadowOpacity: 0.65,
@@ -473,6 +474,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   private requestBookLayoutUpdate() {
+    this.applyResponsivePageFlipMode();
+
     if (this.layoutUpdateFrame) {
       window.cancelAnimationFrame(this.layoutUpdateFrame);
     }
@@ -490,6 +493,31 @@ export class HomePage implements AfterViewInit, OnDestroy {
       this.pageFlip?.update();
       this.layoutUpdateTimer = undefined;
     }, 220);
+  }
+
+  private applyResponsivePageFlipMode() {
+    const settings = this.pageFlip?.getSettings?.();
+
+    if (!settings) {
+      return;
+    }
+
+    // PageFlip normally falls back to one page when its measured container is
+    // narrow. Mobile Safari's browser bars can trigger that fallback in
+    // landscape, so viewport orientation takes precedence on phone widths.
+    settings.usePortrait = !this.shouldForceLandscapeSpread();
+  }
+
+  private shouldForceLandscapeSpread() {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    const viewport = window.visualViewport;
+    const viewportWidth = viewport?.width ?? window.innerWidth;
+    const viewportHeight = viewport?.height ?? window.innerHeight;
+
+    return viewportWidth <= 980 && viewportWidth > viewportHeight;
   }
 
   private queuePageImages(centerIndex: number) {
