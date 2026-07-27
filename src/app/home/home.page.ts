@@ -79,7 +79,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   currentIndex = 0;
   flipState: ReaderFlipState = 'read';
-  readerOrientation: ReaderOrientation = 'landscape';
+  readerOrientation: ReaderOrientation = this.getInitialReaderOrientation();
   showUI = false;
   showMenu = false;
   isOpeningCover = false;
@@ -90,9 +90,12 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private coverTransitionTimer?: number;
   private layoutUpdateFrame?: number;
   private layoutUpdateTimer?: number;
+  private readonly prefetchedPageSources = new Set<string>();
+  private readonly activePagePrefetches = new Map<string, HTMLImageElement>();
   private showUnderlayAfterCoverTransition = false;
   private underlayTargetIndex?: number;
   private readonly updateBookLayout = () => {
+    this.prefetchCurrentAndNextPages(this.currentIndex);
     this.requestBookLayoutUpdate();
   };
 
@@ -182,7 +185,9 @@ export class HomePage implements AfterViewInit, OnDestroy {
       width: 520,
       height: 780,
       size: 'stretch',
-      minWidth: 180,
+      // Keep modern phones in portrait mode while allowing the page to use
+      // their full width. Landscape phones still have enough room for a spread.
+      minWidth: 230,
       maxWidth: 520,
       minHeight: 220,
       maxHeight: 780,
@@ -263,6 +268,18 @@ export class HomePage implements AfterViewInit, OnDestroy {
     return this.pageCount - 1;
   }
 
+  get isSinglePageView() {
+    return this.readerOrientation === 'portrait';
+  }
+
+  get canGoPrevious() {
+    return this.currentIndex > 0 && this.flipState !== 'flipping';
+  }
+
+  get canGoNext() {
+    return this.currentIndex < this.lastIndex && this.flipState !== 'flipping';
+  }
+
   get visualState(): ReaderVisualState {
     if (this.currentIndex <= 0) {
       return 'front-closed';
@@ -281,7 +298,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   get showLeftUnderlay() {
     if (this.isPortraitMode) {
-      return this.activeUnderlayPages.some(page => this.shouldShowUnderlayBehind(page));
+      const page = this.activeUnderlayPages[0];
+      return this.shouldShowUnderlayBehind(page) && page?.side === 'left';
     }
 
     return this.shouldShowUnderlayBehind(this.activeUnderlayPages[0]);
@@ -289,7 +307,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   get showRightUnderlay() {
     if (this.isPortraitMode) {
-      return this.activeUnderlayPages.some(page => this.shouldShowUnderlayBehind(page));
+      const page = this.activeUnderlayPages[0];
+      return this.shouldShowUnderlayBehind(page) && page?.side !== 'left';
     }
 
     return this.shouldShowUnderlayBehind(this.activeUnderlayPages[1]);
@@ -486,6 +505,63 @@ export class HomePage implements AfterViewInit, OnDestroy {
     nextLoadedPageIndexes.add(1);
 
     this.loadedPageIndexes = nextLoadedPageIndexes;
+    this.prefetchCurrentAndNextPages(centerIndex);
+  }
+
+  private prefetchCurrentAndNextPages(centerIndex: number) {
+    if (typeof Image === 'undefined') {
+      return;
+    }
+
+    // In landscape, include both visible pages and the following two pages.
+    const pagesToPrefetch = this.isPortraitMode ? 3 : 4;
+    const lastIndex = Math.min(this.pages.length - 1, centerIndex + pagesToPrefetch - 1);
+
+    for (let index = Math.max(0, centerIndex); index <= lastIndex; index += 1) {
+      const source = this.getPreferredPageSource(this.pages[index]);
+
+      if (!source || this.prefetchedPageSources.has(source)) {
+        continue;
+      }
+
+      this.prefetchedPageSources.add(source);
+
+      const image = new Image();
+      image.decoding = 'async';
+      image.fetchPriority = index === centerIndex ? 'high' : 'low';
+      image.onload = () => {
+        this.activePagePrefetches.delete(source);
+      };
+      image.onerror = () => {
+        this.activePagePrefetches.delete(source);
+        this.prefetchedPageSources.delete(source);
+      };
+
+      this.activePagePrefetches.set(source, image);
+      image.src = source;
+    }
+  }
+
+  private getPreferredPageSource(page?: ComicPage) {
+    if (!page) {
+      return undefined;
+    }
+
+    const prefersMobileSource = window.matchMedia('(max-width: 900px)').matches;
+
+    if (prefersMobileSource) {
+      return page.mobileSrc ?? page.src ?? page.spreadSrc;
+    }
+
+    return page.src ?? page.mobileSrc ?? page.spreadSrc;
+  }
+
+  private getInitialReaderOrientation(): ReaderOrientation {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 459px)').matches) {
+      return 'portrait';
+    }
+
+    return 'landscape';
   }
 
   private spreadShowsUnderlay(index: number) {

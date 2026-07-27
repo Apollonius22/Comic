@@ -1,4 +1,8 @@
-<div class="reader" (click)="toggleUI()">
+<div
+  class="reader"
+  [class.single-page-view]="isSinglePageView"
+  (click)="toggleUI()"
+>
   <div class="magic-backdrop" aria-hidden="true">
     <span class="magic-mote" style="--x: 18%; --y: 74%; --s: 4px; --d: 8s; --delay: -1s"></span>
     <span class="magic-mote" style="--x: 32%; --y: 18%; --s: 6px; --d: 11s; --delay: -5s"></span>
@@ -119,6 +123,7 @@
       type="button"
       class="nav-button left"
       aria-label="Previous pages"
+      [disabled]="!canGoPrevious"
       (click)="prevPage(); $event.stopPropagation()"
     >
       ‹
@@ -128,11 +133,43 @@
       type="button"
       class="nav-button right"
       aria-label="Next pages"
+      [disabled]="!canGoNext"
       (click)="nextPage(); $event.stopPropagation()"
     >
       ›
     </button>
   </div>
+
+  <nav
+    class="mobile-page-nav"
+    aria-label="Page navigation"
+    (click)="$event.stopPropagation()"
+  >
+    <button
+      type="button"
+      class="mobile-nav-button"
+      aria-label="Previous page"
+      [disabled]="!canGoPrevious"
+      (click)="prevPage()"
+    >
+      ‹
+    </button>
+
+    <div class="mobile-page-progress" aria-live="polite">
+      <span class="mobile-page-current">{{ currentIndex + 1 }}</span>
+      <span class="mobile-page-total">of {{ pages.length }}</span>
+    </div>
+
+    <button
+      type="button"
+      class="mobile-nav-button"
+      aria-label="Next page"
+      [disabled]="!canGoNext"
+      (click)="nextPage()"
+    >
+      ›
+    </button>
+  </nav>
 
   @if (showUI) {
     <div class="ui">
