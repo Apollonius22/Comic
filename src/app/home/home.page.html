@@ -155,9 +155,24 @@
       ‹
     </button>
 
-    <div class="mobile-page-progress" aria-live="polite">
-      <span class="mobile-page-current">{{ currentIndex + 1 }}</span>
-      <span class="mobile-page-total">of {{ pages.length }}</span>
+    <div class="mobile-page-scrubber">
+      <div class="mobile-page-progress" aria-live="polite">
+        <span class="mobile-page-current">{{ scrubTargetIndex + 1 }}</span>
+        <span class="mobile-page-total">of {{ pages.length }}</span>
+      </div>
+
+      <input
+        type="range"
+        class="mobile-page-slider"
+        aria-label="Jump to comic page"
+        [attr.aria-valuetext]="'Page ' + (scrubTargetIndex + 1) + ' of ' + pages.length"
+        min="0"
+        [max]="lastIndex"
+        [value]="scrubTargetIndex"
+        [disabled]="flipState === 'flipping'"
+        (input)="previewPageScrub($event)"
+        (change)="commitPageScrub($event)"
+      />
     </div>
 
     <button

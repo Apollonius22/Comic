@@ -78,6 +78,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   ];
 
   currentIndex = 0;
+  scrubTargetIndex = 0;
   flipState: ReaderFlipState = 'read';
   readerOrientation: ReaderOrientation = this.getInitialReaderOrientation();
   showUI = false;
@@ -206,6 +207,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
     this.pageFlip.on('flip', event => {
       this.currentIndex = Number(event.data);
+      this.scrubTargetIndex = this.currentIndex;
       this.queuePageImages(this.currentIndex);
       this.finishCoverTransitionIfReady(true);
     });
@@ -344,8 +346,23 @@ export class HomePage implements AfterViewInit, OnDestroy {
   jumpToChapter(marker: ChapterMarker) {
     this.queuePageImages(marker.pageIndex);
     this.currentIndex = marker.pageIndex;
+    this.scrubTargetIndex = marker.pageIndex;
     this.showMenu = false;
     this.pageFlip?.turnToPage(marker.pageIndex);
+    this.requestBookLayoutUpdate();
+  }
+
+  previewPageScrub(event: Event) {
+    this.scrubTargetIndex = this.getScrubPageIndex(event);
+  }
+
+  commitPageScrub(event: Event) {
+    const targetIndex = this.getScrubPageIndex(event);
+
+    this.scrubTargetIndex = targetIndex;
+    this.queuePageImages(targetIndex);
+    this.currentIndex = targetIndex;
+    this.pageFlip?.turnToPage(targetIndex);
     this.requestBookLayoutUpdate();
   }
 
@@ -506,6 +523,16 @@ export class HomePage implements AfterViewInit, OnDestroy {
     // narrow. Mobile Safari's browser bars can trigger that fallback in
     // landscape, so viewport orientation takes precedence on phone widths.
     settings.usePortrait = !this.shouldForceLandscapeSpread();
+  }
+
+  private getScrubPageIndex(event: Event) {
+    const input = event.target;
+
+    if (!(input instanceof HTMLInputElement)) {
+      return this.currentIndex;
+    }
+
+    return Math.max(0, Math.min(Number(input.value), this.lastIndex));
   }
 
   private shouldForceLandscapeSpread() {
