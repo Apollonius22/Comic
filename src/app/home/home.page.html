@@ -29,6 +29,7 @@
     (pointerup)="onBookPointerUp($event)"
     (pointercancel)="cancelBookPointer()"
     (touchstart)="onBookTouchStart($event)"
+    (touchmove)="onBookTouchMove($event)"
     (touchend)="onBookTouchEnd($event)"
     (touchcancel)="cancelBookSwipe()"
     (click)="onBookClick($event); $event.stopPropagation()"

@@ -81,6 +81,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private fullscreenControlsTimer?: number;
   private portraitSwipeStart?: PortraitSwipeStart;
   private bookPointerStart?: BookPointerStart;
+  private managesTouchSwipeNavigation = false;
   private nativeFullscreenActive = false;
   private readonly fullscreenControlInteractions = new Set<ReaderControlInteraction>();
   private suppressBookClickUntil = 0;
@@ -145,6 +146,11 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
+    // StPageFlip and the reader previously handled the same phone swipe. In
+    // portrait mode that race could leave reverse swipes with an instant page
+    // change. Let the reader recognise the gesture and invoke exactly one of
+    // StPageFlip's animated navigation methods instead.
+    this.managesTouchSwipeNavigation = this.shouldManageTouchSwipeNavigation();
     this.pageFlip = new PageFlip(this.bookHost.nativeElement, {
       width: 520,
       height: 780,
@@ -166,6 +172,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
       mobileScrollSupport: false,
       swipeDistance: 20,
       disableFlipByClick: true,
+      useMouseEvents: !this.managesTouchSwipeNavigation,
     });
 
     this.pageFlip.on('flip', event => {
@@ -386,7 +393,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   onBookTouchStart(event: TouchEvent) {
-    if ((!this.isSinglePageView && !this.isFullscreen) || event.touches.length !== 1) {
+    if (!this.canTrackBookSwipe() || event.touches.length !== 1) {
       return;
     }
 
@@ -404,11 +411,36 @@ export class HomePage implements AfterViewInit, OnDestroy {
     };
   }
 
+  onBookTouchMove(event: TouchEvent) {
+    const start = this.portraitSwipeStart;
+
+    if (!start || !this.managesTouchSwipeNavigation || event.touches.length !== 1) {
+      return;
+    }
+
+    const touch = event.touches.item(0);
+
+    if (!touch) {
+      return;
+    }
+
+    const horizontalDistance = touch.clientX - start.x;
+    const verticalDistance = touch.clientY - start.y;
+
+    if (
+      Math.abs(horizontalDistance) > 10
+      && Math.abs(horizontalDistance) > Math.abs(verticalDistance)
+      && event.cancelable
+    ) {
+      event.preventDefault();
+    }
+  }
+
   onBookTouchEnd(event: TouchEvent) {
     const start = this.portraitSwipeStart;
     this.portraitSwipeStart = undefined;
 
-    if (!start || (!this.isSinglePageView && !this.isFullscreen)) {
+    if (!start || !this.canTrackBookSwipe()) {
       return;
     }
 
@@ -441,6 +473,22 @@ export class HomePage implements AfterViewInit, OnDestroy {
     // page gesture never unexpectedly toggles the navigation controls.
     this.suppressBookClickUntil = Date.now() + 650;
 
+    if (this.managesTouchSwipeNavigation) {
+      event.stopPropagation();
+
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+
+      if (horizontalDistance < 0 && this.canGoNext) {
+        this.nextPage();
+      } else if (horizontalDistance > 0 && this.canGoPrevious) {
+        this.prevPage();
+      }
+
+      return;
+    }
+
     if (!this.isSinglePageView) {
       return;
     }
@@ -470,6 +518,19 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   cancelBookSwipe() {
     this.portraitSwipeStart = undefined;
+  }
+
+  private canTrackBookSwipe() {
+    return this.managesTouchSwipeNavigation || this.isSinglePageView || this.isFullscreen;
+  }
+
+  private shouldManageTouchSwipeNavigation() {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    return viewportWidth <= 720;
   }
 
   onBookPointerDown(event: PointerEvent) {

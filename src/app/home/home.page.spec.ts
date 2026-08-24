@@ -73,4 +73,44 @@ describe('HomePage', () => {
     expect(component.currentIndex).toBeLessThanOrEqual(8);
     expect(component.scrubTargetIndex).toBe(component.currentIndex);
   });
+
+  it('uses the animated previous-page method for a managed mobile swipe', () => {
+    const flipPrev = jasmine.createSpy('flipPrev');
+    const pageFlip = {
+      destroy: jasmine.createSpy('destroy'),
+      getCurrentPageIndex: () => 8,
+      getOrientation: () => 'portrait' as const,
+      flipPrev,
+    };
+    const startTouch = {
+      identifier: 1,
+      clientX: 100,
+      clientY: 300,
+    } as Touch;
+    const endTouch = {
+      identifier: 1,
+      clientX: 220,
+      clientY: 302,
+    } as Touch;
+    const stopPropagation = jasmine.createSpy('stopPropagation');
+
+    component.currentIndex = 8;
+    component.readerOrientation = 'portrait';
+    (component as unknown as { managesTouchSwipeNavigation: boolean })
+      .managesTouchSwipeNavigation = true;
+    (component as unknown as { pageFlip: typeof pageFlip }).pageFlip = pageFlip;
+
+    component.onBookTouchStart({
+      touches: { length: 1, item: () => startTouch },
+    } as unknown as TouchEvent);
+    component.onBookTouchEnd({
+      changedTouches: { length: 1, item: () => endTouch },
+      cancelable: true,
+      preventDefault: jasmine.createSpy('preventDefault'),
+      stopPropagation,
+    } as unknown as TouchEvent);
+
+    expect(stopPropagation).toHaveBeenCalled();
+    expect(flipPrev).toHaveBeenCalledOnceWith('bottom');
+  });
 });
