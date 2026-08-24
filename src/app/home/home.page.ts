@@ -47,6 +47,12 @@ interface PortraitSwipeStart {
   pageIndex: number;
 }
 
+interface BookPointerStart {
+  pointerId: number;
+  x: number;
+  y: number;
+}
+
 @Component({
   selector: 'app-home',
   templateUrl: 'home.page.html',
@@ -110,9 +116,13 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private layoutUpdateFrame?: number;
   private layoutUpdateTimer?: number;
   private swipeFallbackTimer?: number;
+  private fullscreenControlsTimer?: number;
   private portraitSwipeStart?: PortraitSwipeStart;
+  private bookPointerStart?: BookPointerStart;
   private nativeFullscreenActive = false;
+  private fullscreenControlsInteracting = false;
   private suppressBookClickUntil = 0;
+  private readonly fullscreenControlsDelay = 3000;
   private readonly prefetchedPageSources = new Set<string>();
   private readonly activePagePrefetches = new Map<string, HTMLImageElement>();
   private showUnderlayAfterCoverTransition = false;
@@ -132,9 +142,43 @@ export class HomePage implements AfterViewInit, OnDestroy {
       this.nativeFullscreenActive = false;
       this.isFullscreen = false;
       this.showPageNavigation = true;
+      this.showMenu = false;
+      this.fullscreenControlsInteracting = false;
+      this.clearFullscreenControlsTimer();
     }
 
     this.requestBookLayoutUpdate();
+  };
+  private readonly handleFullscreenKeyboard = (event: KeyboardEvent) => {
+    if (!this.isFullscreen) {
+      return;
+    }
+
+    if (event.key === 'Tab') {
+      this.showFullscreenControls();
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      if (!this.getFullscreenElement()) {
+        event.preventDefault();
+        void this.toggleFullscreen();
+      }
+
+      return;
+    }
+
+    if (this.isInteractiveElement(event.target)) {
+      return;
+    }
+
+    if (event.key === 'ArrowLeft' && this.canGoPrevious) {
+      event.preventDefault();
+      this.prevPage();
+    } else if (event.key === 'ArrowRight' && this.canGoNext) {
+      event.preventDefault();
+      this.nextPage();
+    }
   };
 
   constructor() {
@@ -271,6 +315,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     window.visualViewport?.addEventListener('resize', this.updateBookLayout);
     document.addEventListener('fullscreenchange', this.syncFullscreenState);
     document.addEventListener('webkitfullscreenchange', this.syncFullscreenState);
+    document.addEventListener('keydown', this.handleFullscreenKeyboard);
     this.requestBookLayoutUpdate();
   }
 
@@ -291,11 +336,13 @@ export class HomePage implements AfterViewInit, OnDestroy {
       window.clearTimeout(this.swipeFallbackTimer);
     }
 
+    this.clearFullscreenControlsTimer();
     window.removeEventListener('resize', this.updateBookLayout);
     window.removeEventListener('orientationchange', this.updateBookLayout);
     window.visualViewport?.removeEventListener('resize', this.updateBookLayout);
     document.removeEventListener('fullscreenchange', this.syncFullscreenState);
     document.removeEventListener('webkitfullscreenchange', this.syncFullscreenState);
+    document.removeEventListener('keydown', this.handleFullscreenKeyboard);
     this.pageFlip?.destroy();
   }
 
@@ -394,10 +441,12 @@ export class HomePage implements AfterViewInit, OnDestroy {
     this.showMenu = false;
     this.pageFlip?.turnToPage(marker.pageIndex);
     this.requestBookLayoutUpdate();
+    this.scheduleFullscreenControlsHide();
   }
 
   previewPageScrub(event: Event) {
     this.scrubTargetIndex = this.getScrubPageIndex(event);
+    this.onFullscreenControlsActivity();
   }
 
   commitPageScrub(event: Event) {
@@ -408,6 +457,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     this.currentIndex = targetIndex;
     this.pageFlip?.turnToPage(targetIndex);
     this.requestBookLayoutUpdate();
+    this.onFullscreenControlsActivity();
   }
 
   async toggleFullscreen() {
@@ -425,6 +475,9 @@ export class HomePage implements AfterViewInit, OnDestroy {
         this.nativeFullscreenActive = false;
         this.isFullscreen = false;
         this.showPageNavigation = true;
+        this.showMenu = false;
+        this.fullscreenControlsInteracting = false;
+        this.clearFullscreenControlsTimer();
         this.requestBookLayoutUpdate();
       }
 
@@ -434,12 +487,18 @@ export class HomePage implements AfterViewInit, OnDestroy {
     if (this.isFullscreen) {
       this.isFullscreen = false;
       this.showPageNavigation = true;
+      this.showMenu = false;
+      this.fullscreenControlsInteracting = false;
+      this.clearFullscreenControlsTimer();
       this.requestBookLayoutUpdate();
       return;
     }
 
     this.isFullscreen = true;
     this.showPageNavigation = false;
+    this.showMenu = false;
+    this.fullscreenControlsInteracting = false;
+    this.clearFullscreenControlsTimer();
     this.requestBookLayoutUpdate();
 
     const reader = this.readerHost.nativeElement as WebkitFullscreenElement;
@@ -460,7 +519,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   onBookTouchStart(event: TouchEvent) {
-    if (!this.isSinglePageView || event.touches.length !== 1) {
+    if ((!this.isSinglePageView && !this.isFullscreen) || event.touches.length !== 1) {
       return;
     }
 
@@ -482,7 +541,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     const start = this.portraitSwipeStart;
     this.portraitSwipeStart = undefined;
 
-    if (!start || !this.isSinglePageView) {
+    if (!start || (!this.isSinglePageView && !this.isFullscreen)) {
       return;
     }
 
@@ -515,6 +574,10 @@ export class HomePage implements AfterViewInit, OnDestroy {
     // page gesture never unexpectedly toggles the navigation controls.
     this.suppressBookClickUntil = Date.now() + 650;
 
+    if (!this.isSinglePageView) {
+      return;
+    }
+
     if (this.swipeFallbackTimer) {
       window.clearTimeout(this.swipeFallbackTimer);
     }
@@ -540,6 +603,37 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   cancelBookSwipe() {
     this.portraitSwipeStart = undefined;
+  }
+
+  onBookPointerDown(event: PointerEvent) {
+    if (!this.isFullscreen || event.pointerType !== 'mouse') {
+      return;
+    }
+
+    this.bookPointerStart = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+  }
+
+  onBookPointerUp(event: PointerEvent) {
+    const start = this.bookPointerStart;
+    this.bookPointerStart = undefined;
+
+    if (!start || start.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+
+    if (distance >= 12) {
+      this.suppressBookClickUntil = Date.now() + 300;
+    }
+  }
+
+  cancelBookPointer() {
+    this.bookPointerStart = undefined;
   }
 
   nextPage() {
@@ -863,6 +957,11 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   onReaderBackgroundClick() {
+    if (this.isFullscreen) {
+      this.showFullscreenControls();
+      return;
+    }
+
     if (!this.showPageNavigation) {
       return;
     }
@@ -871,9 +970,30 @@ export class HomePage implements AfterViewInit, OnDestroy {
     this.requestBookLayoutUpdate();
   }
 
-  onBookClick() {
+  onBookClick(event: MouseEvent) {
     if (Date.now() < this.suppressBookClickUntil) {
       this.suppressBookClickUntil = 0;
+      return;
+    }
+
+    if (this.isFullscreen) {
+      const bookShell = event.currentTarget;
+
+      if (!(bookShell instanceof HTMLElement)) {
+        return;
+      }
+
+      const bounds = bookShell.getBoundingClientRect();
+      const horizontalPosition = bounds.width > 0
+        ? (event.clientX - bounds.left) / bounds.width
+        : 0.5;
+
+      if (horizontalPosition <= 0.3 && this.canGoPrevious) {
+        this.prevPage();
+      } else if (horizontalPosition >= 0.7 && this.canGoNext) {
+        this.nextPage();
+      }
+
       return;
     }
 
@@ -889,12 +1009,93 @@ export class HomePage implements AfterViewInit, OnDestroy {
     this.requestBookLayoutUpdate();
   }
 
+  onFullscreenControlsActivity() {
+    if (!this.isFullscreen) {
+      return;
+    }
+
+    this.showPageNavigation = true;
+    this.scheduleFullscreenControlsHide();
+  }
+
+  pauseFullscreenControls() {
+    if (!this.isFullscreen) {
+      return;
+    }
+
+    this.fullscreenControlsInteracting = true;
+    this.clearFullscreenControlsTimer();
+  }
+
+  resumeFullscreenControls() {
+    if (!this.isFullscreen) {
+      return;
+    }
+
+    this.fullscreenControlsInteracting = false;
+    this.scheduleFullscreenControlsHide();
+  }
+
   toggleMenu() {
     this.showMenu = !this.showMenu;
+
+    if (!this.isFullscreen) {
+      return;
+    }
+
+    this.showPageNavigation = true;
+
+    if (this.showMenu) {
+      this.clearFullscreenControlsTimer();
+    } else {
+      this.scheduleFullscreenControlsHide();
+    }
   }
 
   private isMobileReaderViewport() {
     const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
     return viewportWidth <= 980;
+  }
+
+  private showFullscreenControls() {
+    if (!this.isFullscreen) {
+      return;
+    }
+
+    this.showPageNavigation = true;
+    this.scheduleFullscreenControlsHide();
+  }
+
+  private scheduleFullscreenControlsHide() {
+    this.clearFullscreenControlsTimer();
+
+    if (
+      !this.isFullscreen
+      || !this.showPageNavigation
+      || this.fullscreenControlsInteracting
+      || this.showMenu
+    ) {
+      return;
+    }
+
+    this.fullscreenControlsTimer = window.setTimeout(() => {
+      this.fullscreenControlsTimer = undefined;
+      this.showPageNavigation = false;
+      this.showMenu = false;
+    }, this.fullscreenControlsDelay);
+  }
+
+  private clearFullscreenControlsTimer() {
+    if (!this.fullscreenControlsTimer) {
+      return;
+    }
+
+    window.clearTimeout(this.fullscreenControlsTimer);
+    this.fullscreenControlsTimer = undefined;
+  }
+
+  private isInteractiveElement(target: EventTarget | null) {
+    return target instanceof HTMLElement
+      && Boolean(target.closest('button, input, select, textarea, [contenteditable="true"]'));
   }
 }

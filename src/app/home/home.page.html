@@ -33,7 +33,17 @@
     <span class="magic-mote" style="--x: 88%; --y: 80%; --s: 2px; --d: 7.7s; --delay: -2.2s"></span>
   </div>
 
-  <div class="dragon-menu" (click)="$event.stopPropagation()">
+  <div
+    class="dragon-menu"
+    [attr.aria-hidden]="isFullscreen && !showPageNavigation ? 'true' : null"
+    [attr.inert]="isFullscreen && !showPageNavigation ? '' : null"
+    (pointerdown)="pauseFullscreenControls()"
+    (pointerup)="resumeFullscreenControls()"
+    (pointercancel)="resumeFullscreenControls()"
+    (focusin)="pauseFullscreenControls()"
+    (focusout)="resumeFullscreenControls()"
+    (click)="$event.stopPropagation()"
+  >
     <button
       type="button"
       class="dragon-button"
@@ -67,10 +77,13 @@
   <div
     class="book-shell"
     [class.is-reading]="showReadingUnderlay"
+    (pointerdown)="onBookPointerDown($event)"
+    (pointerup)="onBookPointerUp($event)"
+    (pointercancel)="cancelBookPointer()"
     (touchstart)="onBookTouchStart($event)"
     (touchend)="onBookTouchEnd($event)"
     (touchcancel)="cancelBookSwipe()"
-    (click)="onBookClick(); $event.stopPropagation()"
+    (click)="onBookClick($event); $event.stopPropagation()"
   >
     <div class="underlay underlay-left" [class.visible]="showLeftUnderlay"></div>
     <div class="underlay underlay-right" [class.visible]="showRightUnderlay"></div>
@@ -137,7 +150,12 @@
     [attr.aria-hidden]="!showPageNavigation"
     [attr.inert]="showPageNavigation ? null : ''"
     aria-label="Page navigation"
-    (click)="$event.stopPropagation()"
+    (pointerdown)="pauseFullscreenControls()"
+    (pointerup)="resumeFullscreenControls()"
+    (pointercancel)="resumeFullscreenControls()"
+    (focusin)="pauseFullscreenControls()"
+    (focusout)="resumeFullscreenControls()"
+    (click)="onFullscreenControlsActivity(); $event.stopPropagation()"
   >
     <button
       type="button"
@@ -175,7 +193,7 @@
       [class.is-active]="isFullscreen"
       [attr.aria-label]="isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'"
       [attr.aria-pressed]="isFullscreen"
-      (click)="toggleFullscreen()"
+      (click)="toggleFullscreen(); $event.stopPropagation()"
     >
       <span class="fullscreen-corner top-left" aria-hidden="true"></span>
       <span class="fullscreen-corner top-right" aria-hidden="true"></span>
