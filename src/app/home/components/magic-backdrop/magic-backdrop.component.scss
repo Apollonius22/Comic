@@ -1,0 +1,105 @@
+:host,
+.magic-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+:host {
+  z-index: 0;
+  display: block;
+}
+
+.magic-backdrop::before,
+.magic-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 8% 7%;
+  border-radius: 50%;
+  filter: blur(26px);
+  opacity: 0.42;
+  animation: arcanePulse 8s ease-in-out infinite;
+}
+
+.magic-backdrop::before {
+  background:
+    conic-gradient(
+      from 30deg,
+      transparent 0deg,
+      rgba(89, 202, 255, 0.24) 52deg,
+      transparent 92deg,
+      rgba(246, 209, 111, 0.2) 168deg,
+      transparent 220deg,
+      rgba(126, 255, 204, 0.18) 284deg,
+      transparent 360deg
+    );
+}
+
+.magic-backdrop::after {
+  inset: 20% 18%;
+  background: radial-gradient(circle, rgba(247, 229, 166, 0.18), transparent 62%);
+  animation-delay: -3s;
+}
+
+.magic-mote {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--s, 5px);
+  height: var(--s, 5px);
+  border-radius: 50%;
+  background: #f8e8b5;
+  box-shadow:
+    0 0 10px rgba(248, 232, 181, 0.95),
+    0 0 22px rgba(87, 184, 255, 0.6);
+  opacity: 0;
+  animation: floatMote var(--d, 9s) ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+@keyframes arcanePulse {
+  0%,
+  100% {
+    opacity: 0.26;
+    transform: rotate(0deg) scale(0.96);
+  }
+
+  50% {
+    opacity: 0.52;
+    transform: rotate(18deg) scale(1.06);
+  }
+}
+
+@keyframes floatMote {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0) scale(0.4);
+  }
+
+  18% {
+    opacity: 0.95;
+  }
+
+  52% {
+    opacity: 0.72;
+    transform: translate3d(36px, -34px, 0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(-28px, -88px, 0) scale(0.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .magic-backdrop::before,
+  .magic-backdrop::after,
+  .magic-mote {
+    animation: none;
+  }
+
+  .magic-mote {
+    opacity: 0.42;
+  }
+}

@@ -25,12 +25,21 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Verify comic assets
+        run: npm run check:assets
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test:ci
 
       - name: Build
         run: npm run build:pages

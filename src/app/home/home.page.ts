@@ -1,35 +1,22 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, inject, OnDestroy, ViewChild } from '@angular/core';
 import { PageFlip, type PageFlipEvent } from 'page-flip/dist/js/page-flip.module.js';
+import { ChapterMenuComponent, type ReaderControlInteraction } from './components/chapter-menu/chapter-menu.component';
+import { MagicBackdropComponent } from './components/magic-backdrop/magic-backdrop.component';
+import { ReaderControlsComponent } from './components/reader-controls/reader-controls.component';
 import { COMIC_CHAPTERS } from './comic-manifest.generated';
-
-type ComicPageRole =
-  | 'front-cover'
-  | 'inside-cover'
-  | 'content'
-  | 'blank'
-  | 'back-cover';
-
-type ComicPageDensity = 'hard' | 'soft';
-type ComicPageSide = 'left' | 'right';
-type ReaderFlipState = 'user_fold' | 'fold_corner' | 'flipping' | 'read';
-type ReaderVisualState = 'front-closed' | 'reading' | 'back-closed';
-type ReaderOrientation = 'portrait' | 'landscape';
-
-interface ComicPage {
-  src?: string;
-  mobileSrc?: string;
-  spreadSrc?: string;
-  role: ComicPageRole;
-  density: ComicPageDensity;
-  alt: string;
-  side?: ComicPageSide;
-  spreadId?: string;
-}
-
-interface ChapterMarker {
-  title: string;
-  pageIndex: number;
-}
+import { getNextPageIndex, getPreviousPageIndex, getVisiblePages } from './reader-navigation';
+import { ReaderImageLoaderService } from './reader-image-loader.service';
+import {
+  clampPageIndex,
+  createChapterMarkers,
+  createComicPages,
+  createReaderProgress,
+  type ChapterMarker,
+  type ComicPage,
+  type ReaderFlipState,
+  type ReaderOrientation,
+} from './reader.models';
+import { ReadingPositionService } from './reading-position.service';
 
 interface WebkitFullscreenDocument extends Document {
   webkitFullscreenElement?: Element;
@@ -57,62 +44,37 @@ interface BookPointerStart {
   selector: 'app-home',
   templateUrl: 'home.page.html',
   styleUrls: ['home.page.scss'],
+  imports: [ChapterMenuComponent, MagicBackdropComponent, ReaderControlsComponent],
+  providers: [ReaderImageLoaderService, ReadingPositionService],
 })
 export class HomePage implements AfterViewInit, OnDestroy {
 
   @ViewChild('readerHost', { static: true }) readerHost!: ElementRef<HTMLElement>;
   @ViewChild('bookHost', { static: true }) bookHost!: ElementRef<HTMLElement>;
 
-  private readonly chapters = COMIC_CHAPTERS;
-  readonly chapterMarkers = this.createChapterMarkers();
-  private readonly contentPages = this.createContentPages();
+  readonly chapterMarkers = createChapterMarkers(COMIC_CHAPTERS);
+  readonly pages = createComicPages(COMIC_CHAPTERS);
+  private readonly pageImages = inject(ReaderImageLoaderService);
+  private readonly readingPosition = inject(ReadingPositionService);
+  private readonly requestedPageIndex = this.readingPosition.readRequestedPageIndex(this.pages.length);
+  private readonly storedPageIndex = this.readingPosition.readStoredPageIndex(this.pages.length);
 
-  pages: ComicPage[] = [
-    {
-      src: 'assets/comics/web/desktop/bookends/cover-desktop.webp',
-      mobileSrc: 'assets/comics/web/mobile/bookends/cover-mobile.webp',
-      role: 'front-cover',
-      density: 'hard',
-      alt: 'Front cover',
-    },
-    {
-      src: 'assets/comics/web/desktop/bookends/inside_left-desktop.webp',
-      mobileSrc: 'assets/comics/web/mobile/bookends/inside_left-mobile.webp',
-      role: 'inside-cover',
-      density: 'hard',
-      alt: 'Inside front cover',
-    },
-    ...this.contentPages,
-    ...this.createBlankPageIfNeeded(this.contentPages.length),
-    {
-      src: 'assets/comics/web/desktop/bookends/inside_right-desktop.webp',
-      mobileSrc: 'assets/comics/web/mobile/bookends/inside_right-mobile.webp',
-      role: 'inside-cover',
-      density: 'hard',
-      alt: 'Inside back cover',
-    },
-    {
-      src: 'assets/comics/web/desktop/bookends/end-desktop.webp',
-      mobileSrc: 'assets/comics/web/mobile/bookends/end-mobile.webp',
-      role: 'back-cover',
-      density: 'hard',
-      alt: 'Back cover',
-    },
-  ];
-
-  currentIndex = 0;
-  scrubTargetIndex = 0;
+  currentIndex = this.requestedPageIndex ?? 0;
+  scrubTargetIndex = this.currentIndex;
+  resumePageIndex = this.requestedPageIndex === undefined
+    ? this.storedPageIndex
+    : undefined;
   flipState: ReaderFlipState = 'read';
   readerOrientation: ReaderOrientation = this.getInitialReaderOrientation();
-  showPageNavigation = true;
+  showPageNavigation = false;
   isFullscreen = false;
   showMenu = false;
   isOpeningCover = false;
   isCoverTransitioning = false;
-  loadedPageIndexes = new Set<number>();
 
   private pageFlip?: PageFlip;
   private coverTransitionTimer?: number;
+  private coverTransitionCleanupTimer?: number;
   private layoutUpdateFrame?: number;
   private layoutUpdateTimer?: number;
   private swipeFallbackTimer?: number;
@@ -120,16 +82,14 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private portraitSwipeStart?: PortraitSwipeStart;
   private bookPointerStart?: BookPointerStart;
   private nativeFullscreenActive = false;
-  private fullscreenControlsInteracting = false;
+  private readonly fullscreenControlInteractions = new Set<ReaderControlInteraction>();
   private suppressBookClickUntil = 0;
   private readonly fullscreenControlsDelay = 3000;
-  private readonly prefetchedPageSources = new Set<string>();
-  private readonly activePagePrefetches = new Map<string, HTMLImageElement>();
   private showUnderlayAfterCoverTransition = false;
   private underlayTargetIndex?: number;
   private readonly updateBookLayout = () => {
     this.applyResponsivePageFlipMode();
-    this.prefetchCurrentAndNextPages(this.currentIndex);
+    this.pageImages.prefetch(this.pages, this.currentIndex, this.isPortraitMode);
     this.requestBookLayoutUpdate();
   };
   private readonly syncFullscreenState = () => {
@@ -143,24 +103,23 @@ export class HomePage implements AfterViewInit, OnDestroy {
       this.isFullscreen = false;
       this.showPageNavigation = true;
       this.showMenu = false;
-      this.fullscreenControlsInteracting = false;
+      this.fullscreenControlInteractions.clear();
       this.clearFullscreenControlsTimer();
     }
 
     this.requestBookLayoutUpdate();
   };
-  private readonly handleFullscreenKeyboard = (event: KeyboardEvent) => {
-    if (!this.isFullscreen) {
-      return;
-    }
-
-    if (event.key === 'Tab') {
+  private readonly handleReaderKeyboard = (event: KeyboardEvent) => {
+    if (event.key === 'Tab' && this.isFullscreen) {
       this.showFullscreenControls();
       return;
     }
 
     if (event.key === 'Escape') {
-      if (!this.getFullscreenElement()) {
+      if (this.showMenu) {
+        event.preventDefault();
+        this.closeMenu();
+      } else if (this.isFullscreen && !this.getFullscreenElement()) {
         event.preventDefault();
         void this.toggleFullscreen();
       }
@@ -182,84 +141,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   };
 
   constructor() {
-    this.queuePageImages(0);
-  }
-
-  private createChapterMarkers(): ChapterMarker[] {
-    let pageIndex = 2;
-
-    return this.chapters.map(chapter => {
-      const marker = {
-        title: chapter.title,
-        pageIndex,
-      };
-
-      pageIndex += chapter.pageCount;
-      return marker;
-    });
-  }
-
-  private createContentPages(): ComicPage[] {
-    let contentOffset = 0;
-    const pages: ComicPage[] = [];
-
-    for (const chapter of this.chapters) {
-      const chapterPages = this.createChapterPages(
-        chapter.folder,
-        chapter.firstPage,
-        chapter.lastPage,
-        contentOffset,
-      );
-
-      pages.push(...chapterPages);
-      contentOffset += chapterPages.length;
-    }
-
-    return pages;
-  }
-
-  private createChapterPages(
-    chapter: string,
-    firstPage: number,
-    lastPage: number,
-    contentOffset: number
-  ): ComicPage[] {
-    const chapterNumber = Number(chapter.match(/\d+/)?.[0] ?? 0);
-    const count = lastPage - firstPage + 1;
-
-    return Array.from({ length: count }, (_, index) => {
-      const contentIndex = contentOffset + index;
-      const pageNumber = firstPage + index;
-
-      return {
-        src: `assets/comics/web/desktop/${chapter}/page_${pageNumber}.webp`,
-        mobileSrc: `assets/comics/web/mobile/${chapter}/page_${pageNumber}.webp`,
-        role: 'content' as const,
-        density: 'soft' as const,
-        alt: pageNumber === 0
-          ? `Chapter ${chapterNumber} cover page`
-          : `Chapter ${chapterNumber} comic page ${pageNumber}`,
-        side: contentIndex % 2 === 0 ? 'right' as const : 'left' as const,
-        spreadId: `chapter-${chapterNumber}-spread-${Math.floor(index / 2) + 1}`,
-      };
-    });
-  }
-
-  private createBlankPageIfNeeded(contentPageCount: number): ComicPage[] {
-    if (contentPageCount % 2 === 0) {
-      return [];
-    }
-
-    return [
-      {
-        src: 'assets/comics/web/desktop/bookends/blank-desktop.webp',
-        mobileSrc: 'assets/comics/web/mobile/bookends/blank-mobile.webp',
-        role: 'blank',
-        density: 'soft',
-        alt: 'Blank page',
-        side: 'left',
-      },
-    ];
+    this.queuePageImages(this.currentIndex);
   }
 
   ngAfterViewInit() {
@@ -275,6 +157,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
       maxHeight: 1050,
       drawShadow: true,
       flippingTime: 1300,
+      startPage: this.currentIndex,
       usePortrait: !this.shouldForceLandscapeSpread(),
       startZIndex: 10,
       autoSize: true,
@@ -288,7 +171,9 @@ export class HomePage implements AfterViewInit, OnDestroy {
     this.pageFlip.on('flip', event => {
       this.currentIndex = Number(event.data);
       this.scrubTargetIndex = this.currentIndex;
+      this.closeMenu();
       this.queuePageImages(this.currentIndex);
+      this.persistReadingPosition(this.currentIndex);
       this.finishCoverTransitionIfReady(true);
     });
 
@@ -315,13 +200,17 @@ export class HomePage implements AfterViewInit, OnDestroy {
     window.visualViewport?.addEventListener('resize', this.updateBookLayout);
     document.addEventListener('fullscreenchange', this.syncFullscreenState);
     document.addEventListener('webkitfullscreenchange', this.syncFullscreenState);
-    document.addEventListener('keydown', this.handleFullscreenKeyboard);
+    document.addEventListener('keydown', this.handleReaderKeyboard);
     this.requestBookLayoutUpdate();
   }
 
   ngOnDestroy() {
     if (this.coverTransitionTimer) {
       window.clearTimeout(this.coverTransitionTimer);
+    }
+
+    if (this.coverTransitionCleanupTimer) {
+      window.clearTimeout(this.coverTransitionCleanupTimer);
     }
 
     if (this.layoutUpdateFrame) {
@@ -342,16 +231,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
     window.visualViewport?.removeEventListener('resize', this.updateBookLayout);
     document.removeEventListener('fullscreenchange', this.syncFullscreenState);
     document.removeEventListener('webkitfullscreenchange', this.syncFullscreenState);
-    document.removeEventListener('keydown', this.handleFullscreenKeyboard);
+    document.removeEventListener('keydown', this.handleReaderKeyboard);
     this.pageFlip?.destroy();
-  }
-
-  get spreadStart() {
-    return this.currentIndex + 1;
-  }
-
-  get spreadEnd() {
-    return Math.min(this.currentIndex + (this.isPortraitMode ? 1 : 2), this.pages.length);
   }
 
   get pageCount() {
@@ -374,16 +255,14 @@ export class HomePage implements AfterViewInit, OnDestroy {
     return this.currentIndex < this.lastIndex && this.flipState !== 'flipping';
   }
 
-  get visualState(): ReaderVisualState {
-    if (this.currentIndex <= 0) {
-      return 'front-closed';
-    }
+  get readerProgress() {
+    return createReaderProgress(this.scrubTargetIndex, this.pages, this.chapterMarkers);
+  }
 
-    if (this.currentIndex >= this.lastIndex) {
-      return 'back-closed';
-    }
-
-    return 'reading';
+  get resumeProgress() {
+    return this.resumePageIndex === undefined
+      ? undefined
+      : createReaderProgress(this.resumePageIndex, this.pages, this.chapterMarkers);
   }
 
   get showReadingUnderlay() {
@@ -413,50 +292,38 @@ export class HomePage implements AfterViewInit, OnDestroy {
       ? this.underlayTargetIndex
       : this.currentIndex;
 
-    return this.getVisiblePages(index);
-  }
-
-  isContentPage(page: ComicPage) {
-    return page.role === 'content';
-  }
-
-  isCoverLikePage(page: ComicPage) {
-    return page.role === 'front-cover'
-      || page.role === 'inside-cover'
-      || page.role === 'back-cover';
+    return getVisiblePages(this.pages, index, this.isPortraitMode);
   }
 
   getPageSrc(page: ComicPage, index: number) {
-    return this.loadedPageIndexes.has(index) ? page.src : undefined;
+    return this.pageImages.isLoaded(index) ? page.src : undefined;
   }
 
   getMobilePageSrc(page: ComicPage, index: number) {
-    return this.loadedPageIndexes.has(index) ? page.mobileSrc : undefined;
+    return this.pageImages.isLoaded(index) ? page.mobileSrc : undefined;
   }
 
   jumpToChapter(marker: ChapterMarker) {
-    this.queuePageImages(marker.pageIndex);
-    this.currentIndex = marker.pageIndex;
-    this.scrubTargetIndex = marker.pageIndex;
-    this.showMenu = false;
-    this.pageFlip?.turnToPage(marker.pageIndex);
-    this.requestBookLayoutUpdate();
-    this.scheduleFullscreenControlsHide();
+    this.turnToPage(marker.pageIndex);
   }
 
-  previewPageScrub(event: Event) {
-    this.scrubTargetIndex = this.getScrubPageIndex(event);
+  resumeReading() {
+    if (this.resumePageIndex === undefined) {
+      return;
+    }
+
+    const targetIndex = this.resumePageIndex;
+    this.resumePageIndex = undefined;
+    this.turnToPage(targetIndex);
+  }
+
+  previewPageScrub(pageIndex: number) {
+    this.scrubTargetIndex = clampPageIndex(pageIndex, this.pages.length);
     this.onFullscreenControlsActivity();
   }
 
-  commitPageScrub(event: Event) {
-    const targetIndex = this.getScrubPageIndex(event);
-
-    this.scrubTargetIndex = targetIndex;
-    this.queuePageImages(targetIndex);
-    this.currentIndex = targetIndex;
-    this.pageFlip?.turnToPage(targetIndex);
-    this.requestBookLayoutUpdate();
+  commitPageScrub(pageIndex: number) {
+    this.turnToPage(pageIndex);
     this.onFullscreenControlsActivity();
   }
 
@@ -476,7 +343,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
         this.isFullscreen = false;
         this.showPageNavigation = true;
         this.showMenu = false;
-        this.fullscreenControlsInteracting = false;
+        this.fullscreenControlInteractions.clear();
         this.clearFullscreenControlsTimer();
         this.requestBookLayoutUpdate();
       }
@@ -488,7 +355,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
       this.isFullscreen = false;
       this.showPageNavigation = true;
       this.showMenu = false;
-      this.fullscreenControlsInteracting = false;
+      this.fullscreenControlInteractions.clear();
       this.clearFullscreenControlsTimer();
       this.requestBookLayoutUpdate();
       return;
@@ -497,7 +364,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     this.isFullscreen = true;
     this.showPageNavigation = false;
     this.showMenu = false;
-    this.fullscreenControlsInteracting = false;
+    this.fullscreenControlInteractions.clear();
     this.clearFullscreenControlsTimer();
     this.requestBookLayoutUpdate();
 
@@ -637,9 +504,10 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   nextPage() {
+    this.closeMenu();
     this.syncReaderOrientation();
     const index = this.pageFlip?.getCurrentPageIndex?.() ?? this.currentIndex;
-    const targetIndex = this.getNextSpreadIndex(index);
+    const targetIndex = getNextPageIndex(index, this.lastIndex, this.isPortraitMode);
 
     this.queuePageImages(targetIndex);
 
@@ -652,9 +520,10 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   prevPage() {
+    this.closeMenu();
     this.syncReaderOrientation();
     const index = this.pageFlip?.getCurrentPageIndex?.() ?? this.currentIndex;
-    const targetIndex = this.getPrevSpreadIndex(index);
+    const targetIndex = getPreviousPageIndex(index, this.lastIndex, this.isPortraitMode);
 
     this.queuePageImages(targetIndex);
 
@@ -664,6 +533,18 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
     this.pageFlip?.flipPrev('bottom');
     this.ensureNavigationCompletes(index, targetIndex);
+  }
+
+  private turnToPage(pageIndex: number) {
+    const targetIndex = clampPageIndex(pageIndex, this.pages.length);
+    this.queuePageImages(targetIndex);
+    this.currentIndex = targetIndex;
+    this.scrubTargetIndex = targetIndex;
+    this.closeMenu();
+    this.pageFlip?.turnToPage(targetIndex);
+    this.persistReadingPosition(targetIndex);
+    this.requestBookLayoutUpdate();
+    this.scheduleFullscreenControlsHide();
   }
 
   private startCoverTransition(targetIndex: number) {
@@ -703,7 +584,12 @@ export class HomePage implements AfterViewInit, OnDestroy {
       this.coverTransitionTimer = undefined;
     }
 
-    window.setTimeout(() => {
+    if (this.coverTransitionCleanupTimer) {
+      window.clearTimeout(this.coverTransitionCleanupTimer);
+    }
+
+    this.coverTransitionCleanupTimer = window.setTimeout(() => {
+      this.coverTransitionCleanupTimer = undefined;
       this.isOpeningCover = false;
       this.isCoverTransitioning = false;
       this.showUnderlayAfterCoverTransition = false;
@@ -805,16 +691,6 @@ export class HomePage implements AfterViewInit, OnDestroy {
     settings.usePortrait = !this.shouldForceLandscapeSpread();
   }
 
-  private getScrubPageIndex(event: Event) {
-    const input = event.target;
-
-    if (!(input instanceof HTMLInputElement)) {
-      return this.currentIndex;
-    }
-
-    return Math.max(0, Math.min(Number(input.value), this.lastIndex));
-  }
-
   private shouldForceLandscapeSpread() {
     if (typeof window === 'undefined') {
       return false;
@@ -833,67 +709,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   private queuePageImages(centerIndex: number) {
-    const nextLoadedPageIndexes = new Set(this.loadedPageIndexes);
-    const firstIndex = Math.max(0, centerIndex - 2);
-    const lastIndex = Math.min(this.pages.length - 1, centerIndex + 4);
-
-    for (let index = firstIndex; index <= lastIndex; index += 1) {
-      nextLoadedPageIndexes.add(index);
-    }
-
-    nextLoadedPageIndexes.add(0);
-    nextLoadedPageIndexes.add(1);
-
-    this.loadedPageIndexes = nextLoadedPageIndexes;
-    this.prefetchCurrentAndNextPages(centerIndex);
-  }
-
-  private prefetchCurrentAndNextPages(centerIndex: number) {
-    if (typeof Image === 'undefined') {
-      return;
-    }
-
-    // In landscape, include both visible pages and the following two pages.
-    const pagesToPrefetch = this.isPortraitMode ? 3 : 4;
-    const lastIndex = Math.min(this.pages.length - 1, centerIndex + pagesToPrefetch - 1);
-
-    for (let index = Math.max(0, centerIndex); index <= lastIndex; index += 1) {
-      const source = this.getPreferredPageSource(this.pages[index]);
-
-      if (!source || this.prefetchedPageSources.has(source)) {
-        continue;
-      }
-
-      this.prefetchedPageSources.add(source);
-
-      const image = new Image();
-      image.decoding = 'async';
-      image.fetchPriority = index === centerIndex ? 'high' : 'low';
-      image.onload = () => {
-        this.activePagePrefetches.delete(source);
-      };
-      image.onerror = () => {
-        this.activePagePrefetches.delete(source);
-        this.prefetchedPageSources.delete(source);
-      };
-
-      this.activePagePrefetches.set(source, image);
-      image.src = source;
-    }
-  }
-
-  private getPreferredPageSource(page?: ComicPage) {
-    if (!page) {
-      return undefined;
-    }
-
-    const prefersMobileSource = window.matchMedia('(max-width: 900px)').matches;
-
-    if (prefersMobileSource) {
-      return page.mobileSrc ?? page.src ?? page.spreadSrc;
-    }
-
-    return page.src ?? page.mobileSrc ?? page.spreadSrc;
+    this.pageImages.queue(this.pages, centerIndex, this.isPortraitMode);
   }
 
   private getInitialReaderOrientation(): ReaderOrientation {
@@ -905,68 +721,19 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   private spreadShowsUnderlay(index: number) {
-    return this.getVisiblePages(index).some(page => this.shouldShowUnderlayBehind(page));
-  }
-
-  private getVisiblePages(index: number) {
-    if (index <= 0) {
-      return [this.pages[0]].filter((page): page is ComicPage => Boolean(page));
-    }
-
-    if (index >= this.lastIndex) {
-      return [this.pages[this.lastIndex]].filter((page): page is ComicPage => Boolean(page));
-    }
-
-    if (this.isPortraitMode) {
-      return [this.pages[index]].filter((page): page is ComicPage => Boolean(page));
-    }
-
-    const spreadStart = index % 2 === 0 ? index - 1 : index;
-    const firstPage = this.pages[spreadStart];
-    const secondPage = this.pages[spreadStart + 1];
-
-    return [firstPage, secondPage].filter((page): page is ComicPage => Boolean(page));
-  }
-
-  private getNextSpreadIndex(index: number) {
-    if (this.isPortraitMode) {
-      return Math.min(index + 1, this.lastIndex);
-    }
-
-    if (index <= 0) {
-      return Math.min(1, this.lastIndex);
-    }
-
-    return Math.min(index + 2, this.lastIndex);
-  }
-
-  private getPrevSpreadIndex(index: number) {
-    if (this.isPortraitMode) {
-      return Math.max(index - 1, 0);
-    }
-
-    if (index <= 1) {
-      return 0;
-    }
-
-    if (index >= this.lastIndex) {
-      return Math.max(this.lastIndex - 2, 0);
-    }
-
-    return Math.max(index - 2, 0);
+    return getVisiblePages(this.pages, index, this.isPortraitMode)
+      .some(page => this.shouldShowUnderlayBehind(page));
   }
 
   onReaderBackgroundClick() {
+    this.closeMenu();
+
     if (this.isFullscreen) {
       this.showFullscreenControls();
       return;
     }
 
-    if (!this.showPageNavigation) {
-      return;
-    }
-
-    this.showPageNavigation = false;
+    this.showPageNavigation = !this.showPageNavigation;
     this.requestBookLayoutUpdate();
   }
 
@@ -997,16 +764,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const showNavigation = this.isMobileReaderViewport()
-      ? !this.showPageNavigation
-      : true;
-
-    if (showNavigation === this.showPageNavigation) {
-      return;
-    }
-
-    this.showPageNavigation = showNavigation;
-    this.requestBookLayoutUpdate();
+    this.closeMenu();
   }
 
   onFullscreenControlsActivity() {
@@ -1018,21 +776,21 @@ export class HomePage implements AfterViewInit, OnDestroy {
     this.scheduleFullscreenControlsHide();
   }
 
-  pauseFullscreenControls() {
+  pauseFullscreenControls(interaction: ReaderControlInteraction) {
     if (!this.isFullscreen) {
       return;
     }
 
-    this.fullscreenControlsInteracting = true;
+    this.fullscreenControlInteractions.add(interaction);
     this.clearFullscreenControlsTimer();
   }
 
-  resumeFullscreenControls() {
+  resumeFullscreenControls(interaction: ReaderControlInteraction) {
     if (!this.isFullscreen) {
       return;
     }
 
-    this.fullscreenControlsInteracting = false;
+    this.fullscreenControlInteractions.delete(interaction);
     this.scheduleFullscreenControlsHide();
   }
 
@@ -1052,9 +810,13 @@ export class HomePage implements AfterViewInit, OnDestroy {
     }
   }
 
-  private isMobileReaderViewport() {
-    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
-    return viewportWidth <= 980;
+  private closeMenu() {
+    if (!this.showMenu) {
+      return;
+    }
+
+    this.showMenu = false;
+    this.scheduleFullscreenControlsHide();
   }
 
   private showFullscreenControls() {
@@ -1072,7 +834,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     if (
       !this.isFullscreen
       || !this.showPageNavigation
-      || this.fullscreenControlsInteracting
+      || this.fullscreenControlInteractions.size > 0
       || this.showMenu
     ) {
       return;
@@ -1092,6 +854,14 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
     window.clearTimeout(this.fullscreenControlsTimer);
     this.fullscreenControlsTimer = undefined;
+  }
+
+  private persistReadingPosition(pageIndex: number) {
+    this.readingPosition.persist(pageIndex, this.pages[pageIndex]);
+
+    if (this.resumePageIndex === pageIndex) {
+      this.resumePageIndex = undefined;
+    }
   }
 
   private isInteractiveElement(target: EventTarget | null) {

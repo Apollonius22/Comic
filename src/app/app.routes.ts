@@ -3,6 +3,7 @@ import { Routes } from '@angular/router';
 export const routes: Routes = [
   {
     path: 'home',
+    title: 'Comic Reader',
     loadComponent: () => import('./home/home.page').then((m) => m.HomePage),
   },
   {

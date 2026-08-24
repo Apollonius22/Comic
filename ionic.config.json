@@ -1,5 +1,5 @@
 {
-  "name": "comic",
+  "name": "comic-reader",
   "integrations": {
     "capacitor": {}
   },

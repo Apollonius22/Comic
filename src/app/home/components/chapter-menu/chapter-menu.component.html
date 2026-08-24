@@ -1,0 +1,53 @@
+<div
+  class="dragon-menu"
+  [class.controls-hidden]="controlsHidden"
+  [attr.aria-hidden]="controlsHidden ? 'true' : null"
+  [attr.inert]="controlsHidden ? '' : null"
+  (pointerdown)="interactionStarted.emit('pointer')"
+  (pointerup)="interactionEnded.emit('pointer')"
+  (pointercancel)="interactionEnded.emit('pointer')"
+  (focusin)="interactionStarted.emit('focus')"
+  (focusout)="interactionEnded.emit('focus')"
+  (click)="$event.stopPropagation()"
+>
+  <button
+    type="button"
+    class="dragon-button"
+    [attr.aria-label]="open ? 'Close comic menu' : 'Open comic menu'"
+    [attr.aria-expanded]="open"
+    (click)="toggleRequested.emit()"
+  >
+    <img
+      src="assets/ui/dragon-menu.png"
+      class="dragon-icon"
+      alt=""
+      aria-hidden="true"
+    />
+  </button>
+
+  @if (open) {
+    <nav class="menu-panel" aria-label="Comic chapters">
+      @if (resumePageIndex !== undefined && resumeProgress) {
+        <button
+          type="button"
+          class="menu-item resume-item"
+          (click)="resumeRequested.emit()"
+        >
+          <span>Continue reading</span>
+          <small>{{ resumeProgress.primary }} · {{ resumeProgress.secondary }}</small>
+        </button>
+      }
+
+      @for (marker of markers; track marker.pageIndex) {
+        <button
+          type="button"
+          class="menu-item"
+          [attr.aria-current]="isCurrentChapter(marker) ? 'page' : null"
+          (click)="chapterSelected.emit(marker)"
+        >
+          {{ marker.title }}
+        </button>
+      }
+    </nav>
+  }
+</div>

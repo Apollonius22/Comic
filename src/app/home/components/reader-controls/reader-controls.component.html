@@ -1,0 +1,67 @@
+<nav
+  class="page-navigation"
+  [class.controls-visible]="visible"
+  [attr.aria-hidden]="!visible"
+  [attr.inert]="visible ? null : ''"
+  aria-label="Page navigation"
+  (pointerdown)="interactionStarted.emit('pointer')"
+  (pointerup)="interactionEnded.emit('pointer')"
+  (pointercancel)="interactionEnded.emit('pointer')"
+  (focusin)="interactionStarted.emit('focus')"
+  (focusout)="interactionEnded.emit('focus')"
+  (click)="activity.emit(); $event.stopPropagation()"
+>
+  <button
+    type="button"
+    class="page-navigation-button"
+    aria-label="Previous page or spread"
+    [disabled]="!canGoPrevious"
+    (click)="previousRequested.emit()"
+  >
+    ‹
+  </button>
+
+  <div class="page-navigation-scrubber">
+    <div class="page-navigation-progress">
+      <span class="page-navigation-current">{{ progress.primary }}</span>
+      <span class="page-navigation-total">{{ progress.secondary }}</span>
+    </div>
+
+    <input
+      type="range"
+      class="page-navigation-slider"
+      aria-label="Jump to comic page"
+      [attr.aria-valuetext]="progress.ariaValueText"
+      min="0"
+      [max]="lastIndex"
+      [value]="currentIndex"
+      [disabled]="flipState === 'flipping'"
+      (input)="emitScrub($event, scrubPreviewed)"
+      (change)="emitScrub($event, scrubCommitted)"
+    />
+  </div>
+
+  <button
+    type="button"
+    class="page-fullscreen-button"
+    [class.is-active]="isFullscreen"
+    [attr.aria-label]="isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'"
+    [attr.aria-pressed]="isFullscreen"
+    (click)="fullscreenRequested.emit(); $event.stopPropagation()"
+  >
+    <span class="fullscreen-corner top-left" aria-hidden="true"></span>
+    <span class="fullscreen-corner top-right" aria-hidden="true"></span>
+    <span class="fullscreen-corner bottom-left" aria-hidden="true"></span>
+    <span class="fullscreen-corner bottom-right" aria-hidden="true"></span>
+  </button>
+
+  <button
+    type="button"
+    class="page-navigation-button"
+    aria-label="Next page or spread"
+    [disabled]="!canGoNext"
+    (click)="nextRequested.emit()"
+  >
+    ›
+  </button>
+</nav>
