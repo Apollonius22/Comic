@@ -77,6 +77,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private coverTransitionCleanupTimer?: number;
   private layoutUpdateFrame?: number;
   private layoutUpdateTimer?: number;
+  private bookResizeObserver?: ResizeObserver;
   private swipeFallbackTimer?: number;
   private fullscreenControlsTimer?: number;
   private portraitSwipeStart?: PortraitSwipeStart;
@@ -202,6 +203,11 @@ export class HomePage implements AfterViewInit, OnDestroy {
       Array.from(this.bookHost.nativeElement.querySelectorAll<HTMLElement>('.book-page'))
     );
 
+    // Controls and fullscreen padding resize the book without a window resize.
+    // Keep PageFlip's cached page bounds in sync throughout those transitions.
+    this.bookResizeObserver = new ResizeObserver(() => this.requestBookLayoutUpdate());
+    this.bookResizeObserver.observe(this.bookHost.nativeElement);
+
     window.addEventListener('resize', this.updateBookLayout);
     window.addEventListener('orientationchange', this.updateBookLayout);
     window.visualViewport?.addEventListener('resize', this.updateBookLayout);
@@ -212,6 +218,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.bookResizeObserver?.disconnect();
     if (this.coverTransitionTimer) {
       window.clearTimeout(this.coverTransitionTimer);
     }

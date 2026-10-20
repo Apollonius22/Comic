@@ -15,6 +15,8 @@
   display: flex;
   justify-content: center;
   align-items: center;
+  // Size the book against this content box, after safe-area/control padding.
+  container-type: size;
   overflow: hidden;
   transition: padding-bottom 240ms ease;
 }
@@ -26,15 +28,19 @@
 .book-shell {
   --book-nav-offset: 58px;
   --panel-inset: clamp(10px, 2.4vw, 25px);
+  --book-columns: 2;
+  --book-max-width: 1040px;
 
   position: relative;
   z-index: 5;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: min(100%, 1040px);
-  max-width: calc(100vw - 28px);
-  max-height: calc(100dvh - 28px);
+  width: min(100%, var(--book-max-width), calc(100cqh * var(--book-columns) * 2 / 3));
+  aspect-ratio: calc(var(--book-columns) * 2) / 3;
+  min-width: 0;
+  max-width: 100%;
+  max-height: 100%;
   margin: 0 auto;
 }
 
@@ -69,6 +75,10 @@
   position: relative;
   z-index: 1;
   margin: 0 auto;
+  width: 100% !important;
+  height: 100%;
+  min-width: 0 !important;
+  min-height: 0 !important;
   max-width: 100%;
   max-height: 100%;
 }
@@ -151,7 +161,7 @@
 
   .page-picture .page-image {
     height: 100%;
-    object-fit: fill;
+    object-fit: contain;
   }
 }
 
@@ -177,7 +187,7 @@
 
   .page-picture .page-image {
     height: 100%;
-    object-fit: fill;
+    object-fit: contain;
   }
 }
 
@@ -193,20 +203,6 @@
 .content-page.page-right .paper-window {
   justify-content: center;
   transform: none;
-}
-
-/* Each PNG has a 15px outline. Crop 7.5 source pixels from both inner
-   edges so an open spread has one 15px center line instead of two. */
-.reader:not(.single-page-view) {
-  .content-page.page-left .page-picture {
-    transform: scaleX(1.0074);
-    transform-origin: left;
-  }
-
-  .content-page.page-right .page-picture {
-    transform: scaleX(1.0074);
-    transform-origin: right;
-  }
 }
 
 .spread-half {
@@ -245,42 +241,20 @@
   .book-shell {
     --book-nav-offset: 0px;
     --panel-inset: clamp(8px, 2.8vw, 14px);
-
-    width: min(
-      calc(100vw - 4px),
-      calc((100dvh - 84px) * 0.666667),
-      430px
-    );
-    min-width: 0;
-    max-width: calc(100vw - 4px);
-    max-height: calc(100dvh - 74px);
+    --book-max-width: 430px;
   }
 
   .reader.navigation-visible {
     padding-bottom: max(82px, calc(env(safe-area-inset-bottom) + 70px));
-
-    .book-shell {
-      width: min(
-        calc(100vw - 20px),
-        calc((100dvh - 156px) * 0.666667),
-        430px
-      );
-      max-width: calc(100vw - 20px);
-      max-height: calc(100dvh - 146px);
-    }
   }
-
-  .book {
-    width: 100% !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
-    max-width: 100% !important;
-    max-height: 100% !important;
-  }
-
 }
 
 .single-page-view {
+  .book-shell {
+    --book-columns: 1;
+    --book-max-width: 430px;
+  }
+
   .underlay {
     right: auto;
     left: 0;
@@ -315,30 +289,12 @@
 
   .book-shell {
     --book-nav-offset: 42px;
-
-    width: min(calc(100vw - 88px), calc((100dvh - 4px) * 1.333333));
-    min-width: 0;
-    max-width: calc(100vw - 88px);
-    max-height: calc(100dvh - 4px);
+    --book-max-width: 1040px;
   }
 
   .reader.navigation-visible {
     padding-bottom: max(58px, calc(env(safe-area-inset-bottom) + 50px));
-
-    .book-shell {
-      width: min(calc(100vw - 88px), calc((100dvh - 66px) * 1.333333));
-      max-height: calc(100dvh - 66px);
-    }
   }
-
-  .book {
-    width: 100% !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
-    max-width: 100% !important;
-    max-height: 100% !important;
-  }
-
 }
 
 @media (min-width: 981px) {
@@ -347,9 +303,7 @@
     padding: 12px;
 
     .book-shell {
-      width: min(100%, 1400px);
-      max-width: calc(100vw - 24px);
-      max-height: calc(100dvh - 24px);
+      --book-max-width: 1400px;
     }
   }
 }
@@ -364,13 +318,7 @@
       max(8px, env(safe-area-inset-left));
 
     .book-shell {
-      width: min(
-        calc(100vw - 16px),
-        calc((100dvh - 16px) * 0.666667),
-        430px
-      );
-      max-width: calc(100vw - 16px);
-      max-height: calc(100dvh - 16px);
+      --book-max-width: 430px;
     }
   }
 }
@@ -385,9 +333,12 @@
       max(16px, env(safe-area-inset-left));
 
     .book-shell {
-      width: min(100%, calc((100dvh - 16px) * 1.333333), 1400px);
-      max-width: 100%;
-      max-height: calc(100dvh - 16px);
+      --book-max-width: 1400px;
     }
   }
+}
+
+// Fullscreen controls still need their own space while they are visible.
+.reader.reader-fullscreen.navigation-visible {
+  padding-bottom: max(84px, calc(env(safe-area-inset-bottom) + 74px));
 }

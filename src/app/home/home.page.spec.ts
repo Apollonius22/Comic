@@ -18,6 +18,87 @@ describe('HomePage', () => {
     expect(component).toBeTruthy();
   });
 
+  function readerBox(width: number, height: number) {
+    const reader = fixture.nativeElement.querySelector('.reader') as HTMLElement;
+    Object.assign(reader.style, {
+      width: `${width}px`, height: `${height}px`, minHeight: '0', transition: 'none',
+    });
+    fixture.detectChanges();
+    return reader;
+  }
+
+  function expectBookInside(reader: HTMLElement) {
+    const area = reader.getBoundingClientRect();
+    const style = getComputedStyle(reader);
+    for (const selector of ['.book-shell', '.book']) {
+      const rect = (reader.querySelector(selector) as HTMLElement).getBoundingClientRect();
+      expect(rect.width).withContext(selector).toBeGreaterThan(0);
+      expect(rect.height).withContext(selector).toBeGreaterThan(0);
+      expect(rect.left).withContext(selector).toBeGreaterThanOrEqual(area.left + parseFloat(style.paddingLeft) - 1);
+      expect(rect.right).withContext(selector).toBeLessThanOrEqual(area.right - parseFloat(style.paddingRight) + 1);
+      expect(rect.top).withContext(selector).toBeGreaterThanOrEqual(area.top + parseFloat(style.paddingTop) - 1);
+      expect(rect.bottom).withContext(selector).toBeLessThanOrEqual(area.bottom - parseFloat(style.paddingBottom) + 1);
+    }
+  }
+
+  it('fits the whole spread into a short desktop content box', () => {
+    expectBookInside(readerBox(1280, 720));
+  });
+
+  it('fits very short windows without the page-flip minimum height overflowing', () => {
+    expectBookInside(readerBox(1280, 200));
+  });
+
+  it('reserves space for visible navigation instead of clipping the book', () => {
+    const reader = readerBox(1280, 720);
+    const shell = reader.querySelector('.book-shell') as HTMLElement;
+    const originalHeight = shell.getBoundingClientRect().height;
+    component.showPageNavigation = true;
+    fixture.detectChanges();
+    expectBookInside(reader);
+    expect(shell.getBoundingClientRect().height).toBeLessThan(originalHeight);
+  });
+
+  it('preserves a single-page shell aspect ratio in portrait mode', () => {
+    component.readerOrientation = 'portrait';
+    const reader = readerBox(390, 844);
+    const rect = (reader.querySelector('.book-shell') as HTMLElement).getBoundingClientRect();
+    expect(rect.width / rect.height).toBeCloseTo(2 / 3, 3);
+    expectBookInside(reader);
+  });
+
+  it('reserves fullscreen control space while still fitting the full book', () => {
+    component.isFullscreen = true;
+    component.showPageNavigation = true;
+    expectBookInside(readerBox(1280, 720));
+  });
+
+  it('contains content images without stretching or horizontally zooming them', () => {
+    const image = fixture.nativeElement.querySelector('.content-page .page-image') as HTMLImageElement;
+    expect(image).not.toBeNull();
+    expect(getComputedStyle(image).objectFit).toBe('contain');
+    expect(getComputedStyle(image.closest('.page-picture') as HTMLElement).transform).toBe('none');
+  });
+
+  it('updates actual page bounds when controls resize the book without a window resize', async () => {
+    const reader = readerBox(1280, 720);
+    const settleLayout = () => new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    });
+    await settleLayout();
+    component.showPageNavigation = true;
+    fixture.detectChanges();
+    await settleLayout();
+    expectBookInside(reader);
+    const shell = (reader.querySelector('.book-shell') as HTMLElement).getBoundingClientRect();
+    for (const page of Array.from(reader.querySelectorAll<HTMLElement>('.book-page'))) {
+      const rect = page.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+      expect(rect.top).toBeGreaterThanOrEqual(shell.top - 1);
+      expect(rect.bottom).toBeLessThanOrEqual(shell.bottom + 1);
+    }
+  });
+
   it('does not reveal fullscreen controls when the center of the book is clicked', () => {
     component.isFullscreen = true;
     component.showPageNavigation = false;
