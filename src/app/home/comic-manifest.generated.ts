@@ -40,8 +40,8 @@ export const COMIC_CHAPTERS: readonly ComicChapterDefinition[] = [
     folder: 'chapter5',
     title: 'Chapter 5',
     firstPage: 0,
-    lastPage: 11,
-    pageCount: 12,
+    lastPage: 10,
+    pageCount: 11,
   },
   {
     folder: 'chapter6',
