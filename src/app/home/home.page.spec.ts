@@ -155,13 +155,15 @@ describe('HomePage', () => {
     expect(component.scrubTargetIndex).toBe(component.currentIndex);
   });
 
-  it('uses the animated previous-page method for a managed mobile swipe', () => {
+  it('uses the animated previous-page method for a managed mobile swipe', fakeAsync(() => {
     const flipPrev = jasmine.createSpy('flipPrev');
+    const turnToPage = jasmine.createSpy('turnToPage');
     const pageFlip = {
       destroy: jasmine.createSpy('destroy'),
       getCurrentPageIndex: () => 8,
       getOrientation: () => 'portrait' as const,
       flipPrev,
+      turnToPage,
     };
     const startTouch = {
       identifier: 1,
@@ -193,5 +195,9 @@ describe('HomePage', () => {
 
     expect(stopPropagation).toHaveBeenCalled();
     expect(flipPrev).toHaveBeenCalledOnceWith('bottom');
-  });
+    // Drain the navigation fallback within this test rather than leaking it
+    // into whichever spec happens to run next.
+    tick(300);
+    expect(turnToPage).toHaveBeenCalledWith(7);
+  }));
 });
